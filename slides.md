@@ -18,8 +18,8 @@ mdc: true
 RoboMaster Summer Camp 2026
 
 ---
-
-## layout: two-cols-header
+layout: two-cols-header
+---
 
 # 这节课解决什么问题
 
@@ -93,8 +93,9 @@ flowchart LR
 - Type-C / USB 线、开发板、插线板
 
 ---
+layout: section
+---
 
-## layout: section
 
 # Git 基础
 
@@ -210,8 +211,8 @@ git push
 ```
 
 ---
-
-## layout: section
+layout: section
+---
 
 # Project 1
 
@@ -564,8 +565,8 @@ Document manual build commands
 演示时每完成一个可解释状态，就做一次 commit。
 
 ---
-
-## layout: section
+layout: section
+---
 
 # Project 2
 
@@ -910,8 +911,8 @@ Document manual ARM build commands
 每个 commit 对应一个工程理解节点。
 
 ---
-
-## layout: section
+layout: section
+---
 
 # Project 2 EIDE
 
@@ -1157,8 +1158,8 @@ Project 2 仍然不是完整 STM32 应用。
 这些交给 Project 3。
 
 ---
-
-## layout: section
+layout: section
+---
 
 # Project 3
 
@@ -1534,8 +1535,8 @@ Project 3 是学生需要提交的重点。
 - GitHub 链接可访问
 
 ---
-
-## layout: section
+layout: section
+---
 
 # C OOP 范式
 
@@ -1621,8 +1622,8 @@ void Led_Toggle(Led *self);
 不是为了把 C 写成 C++，而是为了管理复杂度。
 
 ---
-
-## layout: section
+layout: section
+---
 
 # 总结
 
@@ -1680,8 +1681,8 @@ lec1-foundation-exercises/
 - Project 3 能编译并烧录
 
 ---
-
-## layout: end
+layout: end
+---
 
 # Q&A
 
