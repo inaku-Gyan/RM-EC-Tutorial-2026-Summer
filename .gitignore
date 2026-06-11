@@ -1,0 +1,13 @@
+# -- OS ---------------
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+# -- Node ---------------
+node_modules/
+dist/
+dist-ssr/
+
+*.local
+*.pdf
+*.pptx
