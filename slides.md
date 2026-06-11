@@ -1,5 +1,5 @@
 ---
-theme: default
+theme: dracula
 title: "Lec 1 Foundation"
 info: |
   RoboMaster Summer Camp 2026 - C language embedded development foundations.
