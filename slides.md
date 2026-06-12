@@ -665,7 +665,7 @@ flowchart LR
 
 ---
 
-# Example Project 1
+# Example Project 1 文件结构
 
 ```text
 proj-1/
@@ -1047,7 +1047,7 @@ Example Project 2
 
 ---
 
-# Project 2 的目标
+# Example Project 2 的目标
 
 - 把同类 C 工程迁移到 `arm-none-eabi-gcc`
 - 理解为什么不能直接运行 `.elf`
@@ -1058,10 +1058,15 @@ Example Project 2
 
 ---
 
-# Project 2 文件结构
+# Example Project 2 文件结构
+
+```bash
+mkdir proj-2
+cd proj-2
+```
 
 ```text
-baremetal-arm-build/
+proj-2/
 ├── include/
 │   ├── counter.h
 │   └── led.h
@@ -1073,8 +1078,6 @@ baremetal-arm-build/
     ├── main.c
     └── startup.c
 ```
-
-实际路径：`../demo-projects/baremetal-arm-build`
 
 ---
 
@@ -1174,36 +1177,56 @@ arm-none-eabi-size build/firmware.elf
 # 桌面端 vs 裸机
 
 ```mermaid
-flowchart TB
-  subgraph Desktop
-    A[gcc] --> B[main]
-    B --> C[OS loader]
-    C --> D[main]
-  end
-  subgraph BareMetal
-    E[arm-none-eabi-gcc] --> F[firmware.elf]
-    F --> G[firmware.bin / firmware.hex]
-    G --> H[Flash]
-    H --> I[Reset_Handler]
-    I --> J[main]
-  end
+flowchart LR
+  A[gcc] --> B[main<br/>main.exe]
+  B --> C[OS loader]
+  C --> D["main()"]
 ```
+
+```mermaid
+flowchart LR
+  E[arm-none-eabi-gcc] --> F[firmware.elf]
+  F --> G[firmware.bin / firmware.hex]
+  G --> H[Flash]
+  H --> I[Reset_Handler]
+  I --> J["main()"]
+```
+
 
 ---
 
-# 为什么不能运行 ELF
+# ELF 无法直接运行
 
 ```bash
 ./build/firmware.elf
 ```
-
-不应该这样做。
 
 原因：
 
 - 它是给 Cortex-M4 的，不是给当前电脑 CPU 的
 - 它依赖 MCU 的内存映射
 - 它从 `Reset_Handler` 开始，不是操作系统进程入口
+
+---
+
+# 为什么桌面端不需要手写
+
+桌面端程序启动链路：
+
+```mermaid
+flowchart LR
+  EXE["main / main.exe"] --> OS["OS loader"]
+  OS --> CRT["C runtime"]
+  CRT --> MAIN["main()"]
+```
+
+桌面端通常由系统工具链提供：
+
+- OS loader：装载程序、建立进程地址空间
+- C runtime：准备栈、全局变量、标准库运行环境
+- linker 默认脚本：由系统工具链隐式提供
+
+裸机端没有 OS loader，也没有默认进程运行时。
 
 ---
 
@@ -1226,9 +1249,11 @@ Power on / Reset
 # Vector Table
 
 ```c
+typedef void (*ISR_t)(void);
+
 __attribute__((section(".isr_vector"), used))
-void (*const vector_table[])(void) = {
-  (void (*)(void))(&_estack),
+const ISR_t vector_table[] = {
+  &_estack,
   Reset_Handler,
 };
 ```
@@ -1237,6 +1262,25 @@ void (*const vector_table[])(void) = {
 
 - 初始栈顶在哪里
 - Reset 后跳到哪里
+
+---
+
+# Reset Handler 的作用
+
+`Reset_Handler` 是复位后执行的第一段 C 级启动代码。
+
+它负责把运行环境整理到 `main()` 可以正常执行的状态：
+
+```mermaid
+flowchart LR
+  R["Reset"] --> V["读取 vector table"]
+  V --> H["进入 Reset_Handler"]
+  H --> D["初始化 .data"]
+  D --> B["清零 .bss"]
+  B --> M["调用 main()"]
+```
+
+桌面程序通常由操作系统和运行时完成这些工作；裸机程序必须自己完成。
 
 ---
 
@@ -1259,6 +1303,12 @@ void Reset_Handler(void) {
   main();
 }
 ```
+
+对应关系：
+
+- `&_sidata -> &_sdata`：把有初值变量从 Flash 拷贝到 RAM
+- `&_sbss -> &_ebss`：把零初始化变量清零
+- `main()`：进入用户程序
 
 ---
 
@@ -1285,7 +1335,7 @@ MEMORY
 _estack = ORIGIN(RAM) + LENGTH(RAM);
 ```
 
-这是 STM32F407IGHx 的教学最小布局。
+STM32F407IGHx 的最小布局（示例）。
 
 ---
 
@@ -1329,6 +1379,47 @@ _sidata = LOADADDR(.data);
 
 ---
 
+# Startup 与 Linker Script 分工
+
+| 文件 | 负责内容 |
+| --- | --- |
+| `startup.c` | 提供 vector table、定义 `Reset_Handler`、初始化 `.data`、清零 `.bss`、调用 `main()` |
+| linker script | 声明 Flash/RAM 地址、安排 section 位置、导出启动所需符号 |
+
+核心关系：
+
+```text
+linker script 定义内存布局和符号
+startup.c 使用这些符号完成启动初始化
+```
+
+---
+
+# Startup 与 Linker Script 如何配合
+
+```mermaid
+flowchart LR
+  LD["linker script"] --> MEM["memory layout<br/>Flash / RAM"]
+  LD --> SYM["_estack<br/>_sidata / _sdata / _edata<br/>_sbss / _ebss"]
+
+  ST["startup.c"] --> VT["vector table"]
+  ST --> RH["Reset_Handler"]
+
+  MEM --> ELF["firmware.elf"]
+  SYM --> ELF
+  VT --> ELF
+  RH --> ELF
+
+  ELF --> FLASH["Flash"]
+  FLASH --> CPU["MCU reset"]
+  CPU --> VT
+  VT --> RH
+```
+
+没有这两部分，芯片不知道从哪里开始，也不知道代码和数据应该放在哪里。
+
+---
+
 # 可选：拆开编译和链接
 
 ```bash
@@ -1367,19 +1458,6 @@ arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb \
 | Arm Compiler 6      | 新 Keil MDK，基于 LLVM/Clang       |
 | IAR EWARM           | 商业工业项目                       |
 | LLVM bare-metal     | 可用，但配置更复杂                 |
-
----
-
-# Project 2 的 Git 节奏
-
-```text
-Initialize bare-metal ARM example
-Add minimal startup code and linker script
-Add LED and counter modules
-Document manual ARM build commands
-```
-
-每个 commit 对应一个工程理解节点。
 
 ---
 layout: section
@@ -1635,17 +1713,13 @@ Project 2 仍然不是完整 STM32 应用。
 layout: section
 ---
 
-# Project 3
+# Example Project 3
 
-`stm32-cubemx-eide`
-
-学生跟随完成：真实 STM32 工程
+完整的 STM32 工程
 
 ---
 
-# Project 3 的目标
-
-学生要跟着完成：
+# Example Project 3 的目标
 
 - CubeMX 选择芯片/开发板
 - 配置基础时钟
@@ -1664,16 +1738,6 @@ layout: section
 | Project 1 | 手写桌面 C             | 理解 C 构建         |
 | Project 2 | 手写裸机 C             | 理解交叉编译和启动  |
 | Project 3 | CubeMX 生成 + 用户代码 | 完成真实 STM32 工程 |
-
----
-
-# 学生操作原则
-
-- 跟着做，不急着自由发挥
-- 每一步都确认工程能打开
-- 每次生成代码后看 Git diff
-- 用户代码写在 `USER CODE` 区域
-- 编译失败先看第一条错误
 
 ---
 
@@ -1704,15 +1768,97 @@ flowchart TB
 
 ---
 
-# Cortex-M 不是 STM32
+# MCU 生态的几个层级
 
-| 名称          | 含义                         |
-| ------------- | ---------------------------- |
-| Arm Cortex-M4 | CPU core                     |
-| STM32F407IGHx | ST 的 MCU                    |
-| 开发板        | MCU + 电源 + 调试 + 外设接口 |
-| CMSIS         | Arm core 访问规范和基础定义  |
-| HAL / LL      | ST 的外设库                  |
+| 层级 | 示例 |
+| --- | --- |
+| 1. 指令集架构 | Arm / RISC-V / Xtensa / AVR |
+| 2. 处理器内核 | Cortex-M4 / Cortex-M7 / RV32IMC |
+| 3. 芯片系列 | STM32F1 / STM32F4 / STM32H7 |
+| 4. 具体型号 | STM32F407IGHx |
+| 5. 开发板 | 课程板 / Nucleo / Discovery |
+| 6. 软件支持 | CMSIS / HAL / LL / RTOS |
+
+```text
+架构 -> 内核 -> 系列 -> 型号 -> 开发板 -> 软件支持
+```
+
+先分清层级，再看资料、配置工具和报错信息。
+
+---
+
+# 架构与内核示例
+
+| 层级 | 例子 | 说明 |
+| --- | --- | --- |
+| 指令集架构 | Armv7-M / Armv8-M | CPU 能执行什么指令、异常模型如何定义 |
+| 指令集架构 | RISC-V RV32 / RV64 | 开放指令集，常见于新 MCU 和 SoC |
+| 处理器内核 | Cortex-M3 / M4 / M7 | 面向 MCU 的 Arm 内核 |
+| 处理器内核 | Cortex-A53 / A72 | 面向应用处理器，通常运行 Linux |
+| 处理器内核 | Xtensa LX6 / LX7 | ESP32 系列常见内核 |
+
+`Cortex-*` 是 Arm 的处理器内核产品线，不是某个具体芯片。
+
+---
+
+# Cortex-M 与 Cortex-A
+
+| 项目 | Cortex-M | Cortex-A |
+| --- | --- | --- |
+| 典型用途 | MCU、实时控制、低功耗设备 | 应用处理器、手机、Linux 板卡 |
+| 常见系统 | 裸机、RTOS | Linux、Android |
+| 启动关注点 | vector table、`Reset_Handler`、中断 | bootloader、MMU、操作系统启动 |
+| 例子 | Cortex-M0 / M3 / M4 / M7 / M33 | Cortex-A7 / A53 / A72 |
+| 课程相关 | STM32F407 使用 Cortex-M4 | 不作为本课主线 |
+
+同属 Arm 生态，但开发模型差别很大。
+
+---
+
+# STM32 系列示例
+
+| 系列 | 常见定位 | 例子 |
+| --- | --- | --- |
+| STM32F1 | 经典入门、资源适中 | STM32F103 |
+| STM32F4 | 性能更高，常见于控制和机器人 | STM32F407 / STM32F429 |
+| STM32H7 | 高性能 MCU，频率和外设更强 | STM32H743 / STM32H750 |
+| STM32G0 / G4 | 新一代通用或电机控制方向 | STM32G030 / STM32G431 |
+| STM32L4 / U5 | 低功耗方向 | STM32L432 / STM32U575 |
+| STM32WB / WL | 无线连接方向 | STM32WB55 / STM32WL55 |
+
+同是 STM32，不同系列的内核、外设、时钟树和内存布局都可能不同。
+
+---
+
+# 其他常见 MCU
+
+| 厂商 / 生态 | 例子 | 特点 |
+| --- | --- | --- |
+| ST | STM32F1 / F4 / H7 | CubeMX、HAL / LL 生态完整 |
+| Espressif | ESP32 / ESP32-S3 | Wi-Fi / Bluetooth 常见，Xtensa 或 RISC-V |
+| Nordic | nRF52 / nRF53 | 低功耗 Bluetooth 常见 |
+| NXP | LPC / i.MX RT | Cortex-M MCU 和高性能 crossover MCU |
+| Microchip | AVR / PIC / SAM | 8 bit 到 Cortex-M 产品线都有 |
+| TI | MSPM0 / C2000 | 低功耗或电机控制场景常见 |
+| GigaDevice | GD32F1 / GD32F4 | 国产常见 Cortex-M MCU |
+
+工具链、SDK 和启动文件会随厂商生态变化，但“内核、内存、外设、启动、链接”的问题仍然存在。
+
+---
+
+# 回到课程目标芯片
+
+| 层级 | 本课对应 |
+| --- | --- |
+| 指令集 / 内核 | Arm Cortex-M4 |
+| MCU 系列 | STM32F4 |
+| 具体型号 | STM32F407IGHx |
+| 开发对象 | 课程开发板 |
+| 生成工具 | STM32CubeMX |
+| 工程管理 | EIDE + Arm GCC |
+| 软件库 | CMSIS + HAL / LL |
+
+后续遇到配置项时，先判断它属于哪一层。
 
 ---
 
@@ -1727,8 +1873,6 @@ Pin mode: GPIO_Output
 Label: LED_STATUS
 Initial level: Low
 ```
-
-第一节课不要配置复杂外设。
 
 ---
 
@@ -1804,6 +1948,8 @@ stm32-cubemx-eide/
 
 # `Drivers/CMSIS`
 
+*Cortex Microcontroller Software Interface Standard*
+
 CMSIS 提供：
 
 - Cortex-M core 寄存器定义
@@ -1817,6 +1963,8 @@ CMSIS 提供：
 
 # `Drivers/STM32F4xx_HAL_Driver`
 
+*Hardware Abstraction Layer*
+
 HAL 提供：
 
 - GPIO API
@@ -1826,6 +1974,8 @@ HAL 提供：
 - CAN API
 
 HAL 更抽象，LL 更接近寄存器。
+
+LL: Low Layer
 
 ---
 
@@ -1877,6 +2027,10 @@ git diff
 - 自己写的代码是否保留
 - 是否新增了驱动文件
 - 是否更新了 `.ioc`
+- Windows 上注意 `\r\n` 和 `\n` 换行差异
+- 如果 diff 全文件变动，先检查是否只是换行符变化
+
+项目协作时可以用 `.gitattributes` 固定换行策略。
 
 ---
 
@@ -1968,7 +2122,7 @@ EIDE 中必须指向它。
 
 # Step 7: 编译
 
-学生检查：
+检查：
 
 - 是否有 include error
 - 是否有 undefined reference
@@ -1995,21 +2149,6 @@ EIDE 中必须指向它。
 - 调试器
 - 目标芯片型号
 - reset / boot 配置
-
----
-
-# Step 9: Git Commit
-
-建议 commit：
-
-```text
-Generate STM32 GPIO project with CubeMX
-Blink LED in main loop
-Add EIDE configuration for CubeMX project
-Document flash and debug steps
-```
-
-Project 3 是学生需要提交的重点。
 
 ---
 
@@ -2138,24 +2277,9 @@ Embedded:
 
 | Project               | 你应该记住                                |
 | --------------------- | ----------------------------------------- |
-| `desktop-c-build`     | C 工程如何被 gcc 构建                     |
-| `baremetal-arm-build` | 固件为什么需要 startup 和 linker script   |
-| `stm32-cubemx-eide`   | 真实 STM32 工程如何生成、配置、编译、烧录 |
-
----
-
-# 课后提交
-
-提交一个 GitHub 仓库：
-
-```text
-lec1-foundation-exercises/
-├── desktop-c-build/
-├── baremetal-arm-build/
-└── stm32-cubemx-eide/
-```
-
-重点检查 Project 3。
+| `proj-1`     | C 工程如何被 gcc 构建                     |
+| `proj-2` | 固件为什么需要 startup 和 linker script   |
+| `proj-3`   | 真实 STM32 工程如何生成、配置、编译、烧录 |
 
 ---
 
@@ -2165,7 +2289,6 @@ lec1-foundation-exercises/
 - 构建命令或 EIDE 配置可复现
 - `.gitignore` 正确
 - commit history 有意义
-- README 写清楚如何构建
 - Project 3 能编译并烧录
 
 ---
