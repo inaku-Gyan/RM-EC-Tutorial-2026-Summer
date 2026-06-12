@@ -25,20 +25,173 @@ layout: section
 
 # Git 基础
 
-版本管理
+本地历史、分支与远程同步
+
+---
+
+# 本地提交历史
+
+```mermaid
+gitGraph
+  commit id: "初始化仓库"
+  commit id: "添加基础代码"
+  branch feature-led
+  checkout feature-led
+  commit id: "声明 LED 接口"
+  commit id: "实现 LED 模块"
+  checkout main
+  branch feature-counter
+  checkout feature-counter
+  commit id: "声明计数器接口"
+  commit id: "实现计数器"
+  checkout main
+  commit id: "编写 README"
+  branch experiment
+  checkout experiment
+  commit id: "尝试新接口"
+  checkout main
+  merge feature-led id: "合并 LED"
+  merge feature-counter id: "合并计数器"
+```
+
+- `commit`：一次可追踪的工程快照
+- `branch`：指向某个提交的分支名称
+
+---
+
+# `main` 和 `HEAD`
+
+```mermaid
+gitGraph
+  commit id: "初始化仓库"
+  commit id: "添加基础代码"
+  commit id: "编写 README" tag: "HEAD"
+```
+
+- `main`：当前分支名
+- `HEAD`：你当前所在的位置
+
+后续通过实操观察 `HEAD` 随分支切换和提交移动。
 
 ---
 
 # Git 和 GitHub
 
-- Git：本地版本管理工具
-- GitHub：远程代码托管平台
+| 名称 | 作用 |
+| --- | --- |
+| Git | 本地版本管理工具 |
+| GitHub | 远程代码托管平台 |
 
-初始化 Git 仓库：
+Git 是完全独立的工具，GitHub 是基于 Git 的在线服务。
+
+其他类似平台：GitLab、Bitbucket、Gitee 等。
+
+查看当前设置的远程：
+
+```bash
+git remote -v
+```
+
+---
+
+# Example Project 1
+
+```bash
+mkdir proj-1
+cd proj-1
+```
+
+本节 Git 操作都围绕这个项目理解：
+
+```text
+proj-1/
+├── include/
+├── src/
+├── README.md
+└── .gitignore
+```
+
+---
+
+# 初始化仓库
 
 ```bash
 git init
 ```
+
+初始化前：
+
+```text
+proj-1/
+├── include/
+├── src/
+└── README.md
+```
+
+初始化后：
+
+```text {2}
+proj-1/
+├── .git/
+├── include/
+├── src/
+└── README.md
+```
+
+<!--
+Presenter notes:
+`.git` 是隐藏目录。
+macOS Finder 显示隐藏文件：Command + Shift + .
+Windows 文件资源管理器：View/查看 -> Show/显示 -> Hidden items/隐藏的项目。
+命令行中可以用 `ls -la` 查看隐藏文件。
+-->
+
+---
+
+# `.git/` 是什么
+
+```mermaid
+flowchart TB
+  WD[工作目录<br/>源码和文档] --> GIT[.git/<br/>本地仓库数据库]
+  GIT --> OBJ[objects<br/>提交和文件内容]
+  GIT --> REF[refs<br/>分支和标签]
+  GIT --> HEAD[HEAD<br/>当前位置]
+```
+
+`.git/` 记录仓库历史和元数据。
+
+---
+
+# `.git/` 的特性
+
+- 它是隐藏目录
+- 它让当前目录变成 Git 仓库
+- 删除 `.git/` 后，文件还在，但 Git 历史消失
+- 不要手动修改 `.git/` 内部文件
+- 移动整个项目目录时，`.git/` 要一起保留
+
+---
+
+# 初始化后先看状态
+
+```bash
+git status
+```
+
+可能看到：
+
+```text
+On branch main
+
+No commits yet
+
+Untracked files:
+  README.md
+  include/
+  src/
+```
+
+`status` 是 Git 里最常用的安全检查。
 
 ---
 
@@ -46,39 +199,102 @@ git init
 
 ```mermaid
 flowchart LR
-  WT[Working Tree<br/>正在修改的文件] -->|`git add`| SA[Staging Area<br/>准备提交的文件]
-  SA -->|`git commit`| REPO[Repository<br/>本地提交历史]
-  REPO -->|`git push`| GH[GitHub<br/>远程仓库]
+  WT[Working Tree<br/>正在编辑的文件] -->|git add| STAGE[Staging Area<br/>准备进入下一次提交]
+  STAGE -->|git commit| REPO[Repository<br/>本地提交历史]
 ```
 
+- Working Tree：你正在改的文件
+- Staging Area：下一次 commit 的候选内容
+- Repository：已经提交的历史
 
 ---
 
-# 最小 Git 节奏
+# 实操：加入暂存区
 
 ```bash
-git init
 git status
-git add README.md .gitignore
-git commit -m "Initialize project"
+git add README.md include/ src/
+git status
+```
+
+`git add` 不是上传。
+
+它只是把文件放进 staging area，准备进入下一次 commit。
+
+加入当前所有改动：
+
+```bash
+git add .
+```
+
+---
+
+# 实操：创建第一次提交
+
+```bash
+git commit -m "init project"
+```
+
+查看历史：
+
+```bash
 git log --oneline
 ```
 
-commit message 要描述这次工程状态的意图。
+commit message 应该描述这次提交的工程意图。
+
+---
+
+# 三个区域完整流程
+
+```mermaid
+sequenceDiagram
+  participant WT as Working Tree
+  participant ST as Staging Area
+  participant RP as Repository
+  WT->>ST: git add README.md .gitignore
+  ST->>RP: git commit -m "Initialize..."
+  RP-->>WT: git checkout <ref>
+```
+
+---
+
+# Git Graph GUI
+
+今天使用 VS Code 插件：
+
+```text
+Git Graph
+```
+
+它是 Git 历史的图形视图，不是另一个版本管理系统。
+
+---
+
+# 命令行和 Git Graph 的关系
+
+| 命令行 | Git Graph |
+| --- | --- |
+| `git log --oneline` | 提交列表 |
+| `git branch` | 分支视图 |
+| `git diff` | 文件变化 |
+| `git checkout` / `switch` | 切换位置 |
 
 ---
 
 # `.gitignore`
 
-```sh
+```text
 # Build artifacts
 build/
 *.o
 *.a
-*.exe
 *.elf
-__pycache__/
-*.pyc
+*.bin
+*.hex
+*.map
+*.exe
+*.out
 
 # IDE files
 .vscode/
@@ -89,63 +305,323 @@ __pycache__/
 Thumbs.db
 ```
 
+`.gitignore` 用来避免把本地构建产物和临时文件提交进仓库。
+
 ---
 
-# GitHub 最小同步
+# `.gitignore` 的注意点
+
+- 只影响还没有被 Git 跟踪的新文件
+- 已经提交过的文件，后来写进 `.gitignore` 不会自动消失
+- 课程项目里通常不提交 `build/`
+- 团队项目里有些 `.vscode` 配置可以提交，看约定
+
+---
+
+# 课后拓展：`.gitattributes` 和 `.gitkeep`
+
+`.gitattributes`：
+
+- 控制换行符
+- 控制语言统计
+- 控制 merge 策略
+
+`.gitkeep`：
+
+- 不是 Git 官方机制
+- 常用于保留空目录
+- 本节不展开
+
+---
+
+# 分支是什么
+
+```mermaid
+gitGraph
+  commit id: "初始化仓库"
+  commit id: "整理结构"
+  branch feature
+  checkout feature
+  commit id: "实现功能"
+  checkout main
+  commit id: "更新文档"
+```
+
+分支是一条开发线。
+
+---
+
+# 创建和切换分支
+
+```bash
+git switch -c new-branch-1
+# Or equivalently:
+git checkout -b new-branch-2
+```
+
+做一些修改后：
+
+```bash
+git status
+git add src/counter.c
+git commit -m "Update counter demo"
+```
+
+---
+
+# `git merge`
+
+```mermaid
+gitGraph
+  commit id: "初始化仓库"
+  commit id: "整理结构"
+  branch feature
+  checkout feature
+  commit id: "添加接口"
+  commit id: "实现模块"
+  checkout main
+  commit id: "更新文档"
+  merge feature id: "合并功能"
+```
+
+merge 把另一条分支的修改合回**当前分支**。
+
+
+```bash
+git switch main
+git merge feature/demo-counter
+```
+
+
+拓展内容：
+
+- rebase
+- squash
+
+
+---
+
+# Merge Conflict 是什么
+
+```text
+同一个文件的同一段内容
+在两个分支里被不同方式修改
+Git 无法自动决定保留哪一个
+```
+
+处理原则：
+
+- 先读冲突内容
+- 决定最终代码
+- 删除冲突标记
+- `git add`
+- `git commit`
+
+---
+
+# `git stash`
+
+stash 用来临时放下当前改动。
+
+适合场景：
+
+- 你改到一半，需要切分支
+- 你想先 pull 远程更新
+- 你不想马上 commit 当前实验性修改
+
+---
+
+# Stash 图示
+
+```mermaid
+flowchart LR
+  WT[Working Tree<br/>未提交改动] -->|git stash push| STASH[Stash Stack]
+  STASH -->|git stash pop| WT2[Working Tree<br/>恢复改动]
+  CLEAN[Clean Working Tree] -. after stash .-> WT
+```
+
+stash 不是长期保存方案，长期保存用 commit。
+
+---
+
+# Stash 实操
+
+```bash
+git status
+git stash push -m "try counter changes"
+git status
+git stash list
+git stash pop
+```
+
+常用命令：
+
+- `git stash -u`: 连 untracked 文件一起 stash
+- `git stash list`: 查看 stash 列表
+- `git stash pop`: 恢复最近一次 stash 并从 stash 列表删除
+- `git stash drop`: 删除 stash 列表中的某个 stash
+
+---
+
+# Remote 和 GitHub
+
+```mermaid
+flowchart LR
+  LOCAL[Local Repository] <-->|fetch / push / pull| ORIGIN[origin<br/>GitHub Repository]
+```
+
+`origin` 只是远程仓库的常用名字。
+
+---
+
+# Remote 基本操作
+
+查看远程：
+
+```bash
+git remote -v
+```
+
+添加远程：
 
 ```bash
 git remote add origin <repo-url>
-git branch -M main
-git push -u origin main
 ```
 
-后续更新：
+push：
 
 ```bash
-git add <files>
-git commit -m "Complete project exercise"
+git push origin main:main
+git push origin main
+
+git push --set-upstream origin main
+git push -u origin main
+
 git push
 ```
+
+---
+
+# `push` / `fetch` / `pull`
+
+```mermaid
+flowchart TB
+  L[Local Repository] -->|git push| R[GitHub origin]
+  R -->|git fetch| F[Remote-tracking refs<br/>origin/main]
+  F -->|merge| L
+  R -->|git pull = fetch + merge| L
+```
+
+`pull` 本质是 `fetch` 后再 `merge`。
+
+---
+
+# `git fetch`
+
+```bash
+git fetch origin
+```
+
+作用：
+
+- 下载远程最新历史
+- 不直接改你的当前分支文件
+- 可以先观察远程发生了什么
+
+---
+
+# `git pull`
+
+```bash
+git pull
+```
+
+等价直觉：
+
+```bash
+git fetch origin && git merge origin/main
+```
+
+改代码前先 pull，是团队协作里的基本习惯。
+
+---
+
+# Clone 仓库到本地
+
+HTTPS：
+
+```bash
+git clone https://github.com/user/repo.git
+```
+
+SSH：
+
+```bash
+git clone git@github.com:user/repo.git
+```
+
+HTTPS 更直观；SSH 更适合长期开发。
+
+---
+
+# GitHub Repo 权限
+
+| 权限 | 含义 |
+| --- | --- |
+| Public | 任何人可见 |
+| Private | 只有授权用户可见 |
+| Collaborator | 被邀请的协作者 |
+| Branch Protection | 保护重要分支 |
+
+---
+
+# Branch Protection
+
+常见保护规则：
+
+- 禁止直接 push 到 `main`
+- 要求 Pull Request
+- 要求 review
+- 要求 CI 通过
+
+本节只知道概念，不现场配置。
+
+---
+
+# 课后拓展
+
+| 功能 | 用途 |
+| --- | --- |
+| `git tag` | 给版本打标签 |
+| `git cherry-pick` | 选择性地应用某个提交 |
+| `git submodule` | 引入另一个 Git 仓库 |
+| `git worktree` | 一个仓库多个工作目录 |
+| Git hooks | 在 commit/push 前后执行脚本 |
 
 ---
 layout: section
 ---
 
-# Project 1
+# 桌面端 C 工程构建
 
-`desktop-c-build`
-
-教师演示：桌面端 C 构建规则
+Example Project 1
 
 ---
 
-# Project 1 的目标
-
-- 看懂一个最小多模块 C 工程
-- 用一条 `gcc` 命令完成构建
-- 理解 `-Iinclude` 的作用
-- 观察预处理、汇编、object file
-- 故意制造 include / link 错误
-- 连接 Git 工作流
-
----
-
-# Project 1 文件结构
+# Example Project 1 文件结构
 
 ```text
-desktop-c-build/
-  README.md
-  .gitignore
-  include/
-    counter.h
-    led.h
-  src/
-    counter.c
-    led.c
-    main.c
+proj-1/
+├── README.md
+├── .gitignore
+├── include/
+│   ├── counter.h
+│   └── led.h
+└── src/
+    ├── counter.c
+    ├── led.c
+    └── main.c
 ```
-
-实际路径：`../demo-projects/desktop-c-build`
 
 ---
 
@@ -156,15 +632,9 @@ desktop-c-build/
 | `led`     | 用 `printf` 模拟 LED 状态 |
 | `counter` | 维护一个简单计数器        |
 
-为什么要两个模块？
-
-- 展示多个 `.h/.c`
-- 展示多个源文件参与构建
-- 更容易制造链接错误
-
 ---
 
-# `led.h`
+## `led.h`
 
 ```c
 #pragma once
@@ -175,11 +645,9 @@ void led_toggle(void);
 int led_get_state(void);
 ```
 
-头文件描述“别人可以怎么用我”。
+<br/>
 
----
-
-# `counter.h`
+## `counter.h`
 
 ```c
 #pragma once
@@ -482,16 +950,16 @@ layout: section
 
 ```text
 baremetal-arm-build/
-  include/
-    counter.h
-    led.h
-  linker/
-    stm32f407ighx_min.ld
-  src/
-    counter.c
-    led.c
-    main.c
-    startup.c
+├── include/
+│   ├── counter.h
+│   └── led.h
+├── linker/
+│   └── stm32f407ighx_min.ld
+└── src/
+    ├── counter.c
+    ├── led.c
+    ├── main.c
+    └── startup.c
 ```
 
 实际路径：`../demo-projects/baremetal-arm-build`
@@ -822,10 +1290,13 @@ layout: section
 关键文件：
 
 ```text
-.eide/eide.yml
-.eide/files.options.yml
-.vscode/tasks.json
-baremetal-arm-build-EIDE.code-workspace
+baremetal-arm-build-EIDE/
+├── .eide/
+│   ├── eide.yml
+│   └── files.options.yml
+├── .vscode/
+│   └── tasks.json
+└── baremetal-arm-build-EIDE.code-workspace
 ```
 
 ---
@@ -1194,14 +1665,15 @@ flowchart LR
 生成后重点看结构，不急着改代码：
 
 ```text
-Core/
-  Inc/
-  Src/
-Drivers/
-  CMSIS/
-  STM32F4xx_HAL_Driver/
-startup_stm32f407xx.s
-STM32F407xx_FLASH.ld
+stm32-cubemx-eide/
+├── Core/
+│   ├── Inc/
+│   └── Src/
+├── Drivers/
+│   ├── CMSIS/
+│   └── STM32F4xx_HAL_Driver/
+├── startup_stm32f407xx.s
+└── STM32F407xx_FLASH.ld
 ```
 
 ---
@@ -1250,8 +1722,9 @@ HAL 更抽象，LL 更接近寄存器。
 CubeMX 生成：
 
 ```text
-startup_stm32f407xx.s
-STM32F407xx_FLASH.ld
+stm32-cubemx-eide/
+├── startup_stm32f407xx.s
+└── STM32F407xx_FLASH.ld
 ```
 
 对照 Project 2：
@@ -1314,9 +1787,15 @@ git diff
 要包含：
 
 ```text
-Core/Src/*.c
-Drivers/STM32F4xx_HAL_Driver/Src/*.c
-startup_stm32f407xx.s
+stm32-cubemx-eide/
+├── Core/
+│   └── Src/
+│       └── *.c
+├── Drivers/
+│   └── STM32F4xx_HAL_Driver/
+│       └── Src/
+│           └── *.c
+└── startup_stm32f407xx.s
 ```
 
 如果某个 `.c` 没进构建，链接时会报 undefined reference。
@@ -1328,10 +1807,15 @@ startup_stm32f407xx.s
 常见 include：
 
 ```text
-Core/Inc
-Drivers/CMSIS/Include
-Drivers/CMSIS/Device/ST/STM32F4xx/Include
-Drivers/STM32F4xx_HAL_Driver/Inc
+stm32-cubemx-eide/
+├── Core/
+│   └── Inc/
+└── Drivers/
+    ├── CMSIS/
+    │   ├── Include/
+    │   └── Device/ST/STM32F4xx/Include/
+    └── STM32F4xx_HAL_Driver/
+        └── Inc/
 ```
 
 如果配置错，编译器会找不到 HAL 或芯片头文件。
@@ -1360,7 +1844,8 @@ STM32F407xx
 真实 CubeMX 工程通常有：
 
 ```text
-STM32F407xx_FLASH.ld
+stm32-cubemx-eide/
+└── STM32F407xx_FLASH.ld
 ```
 
 EIDE 中必须指向它。
@@ -1553,9 +2038,9 @@ Embedded:
 
 ```text
 lec1-foundation-exercises/
-  desktop-c-build/
-  baremetal-arm-build/
-  stm32-cubemx-eide/
+├── desktop-c-build/
+├── baremetal-arm-build/
+└── stm32-cubemx-eide/
 ```
 
 重点检查 Project 3。
