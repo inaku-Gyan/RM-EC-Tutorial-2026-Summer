@@ -11,86 +11,12 @@ transition: slide-left
 mdc: true
 ---
 
-# Lec 1 Foundation
+# Embedded C Development
 
 嵌入式 C 开发基础
 
-RoboMaster Summer Camp 2026
+RM Summer Camp 2026
 
----
-layout: two-cols-header
----
-
-# 这节课解决什么问题
-
-::left::
-
-## 不是普通 C 语法课
-
-- 不重点复习 `if` / `for` / 指针语法
-- 不直接深入外设寄存器
-- 不要求一次掌握完整 STM32 工程
-
-::right::
-
-## 是工程地图课
-
-- C 代码如何变成程序
-- 程序如何变成固件
-- 工具链、IDE、Git 各自负责什么
-- 后续写驱动代码应该怎么组织
-
----
-
-# 一条主线
-
-```text
-C source
-  -> compiler
-  -> linker
-  -> desktop executable / embedded firmware
-  -> Git tracks every meaningful step
-```
-
-今天所有概念都围绕这条线展开。
-
----
-
-# 三个 Example Project
-
-| Project               | 角色         | 目标                                 |
-| --------------------- | ------------ | ------------------------------------ |
-| `desktop-c-build`     | 教师演示     | 用桌面端 C 讲清构建规则              |
-| `baremetal-arm-build` | 教师详细演示 | 把 C 工程迁移到 Cortex-M4 固件       |
-| `stm32-cubemx-eide`   | 学生跟做     | 用 CubeMX + EIDE 完成真实 STM32 工程 |
-
----
-
-# 课堂分工
-
-```mermaid
-flowchart LR
-  P1[Project 1<br/>教师演示] --> P2[Project 2<br/>教师详细演示]
-  P2 --> P3[Project 3<br/>学生跟随完成]
-  P3 --> HW[课后提交 GitHub]
-```
-
-- 前两个 project 主要看清楚“为什么”
-- 第三个 project 重点练会“怎么做”
-
----
-
-# 工具准备
-
-- VS Code
-- Git
-- GitHub 账号
-- 桌面端 `gcc`
-- `arm-none-eabi-gcc`
-- EIDE
-- STM32CubeMX
-- ST-Link / J-Link / DAPLink
-- Type-C / USB 线、开发板、插线板
 
 ---
 layout: section
@@ -99,18 +25,20 @@ layout: section
 
 # Git 基础
 
-工程状态要能被保存、解释、回退、同步
+版本管理
 
 ---
 
-# Git 和 GitHub 不是一回事
+# Git 和 GitHub
 
-| 名称   | 作用                   |
-| ------ | ---------------------- |
-| Git    | 本地版本管理工具       |
-| GitHub | 远程代码托管平台       |
-| commit | 本地仓库里的工程快照   |
-| push   | 把本地 commit 推到远程 |
+- Git：本地版本管理工具
+- GitHub：远程代码托管平台
+
+初始化 Git 仓库：
+
+```bash
+git init
+```
 
 ---
 
@@ -118,12 +46,11 @@ layout: section
 
 ```mermaid
 flowchart LR
-  WT[Working Tree<br/>正在修改的文件] -->|git add| SA[Staging Area<br/>准备提交的文件]
-  SA -->|git commit| REPO[Repository<br/>本地提交历史]
-  REPO -->|git push| GH[GitHub<br/>远程仓库]
+  WT[Working Tree<br/>正在修改的文件] -->|`git add`| SA[Staging Area<br/>准备提交的文件]
+  SA -->|`git commit`| REPO[Repository<br/>本地提交历史]
+  REPO -->|`git push`| GH[GitHub<br/>远程仓库]
 ```
 
-先 `status`，再 `diff`，最后再 `add`。
 
 ---
 
@@ -141,55 +68,25 @@ commit message 要描述这次工程状态的意图。
 
 ---
 
-# 每次 Commit 前
+# `.gitignore`
 
-```bash
-git status
-git diff
-git add <files>
-git status
-git commit -m "<clear message>"
-```
-
-不要在没看过 `status` 和 `diff` 的情况下盲目提交。
-
----
-
-# 什么不该进 Git
-
-```text
+```sh
+# Build artifacts
 build/
 *.o
 *.a
-*.elf
-*.bin
-*.hex
-*.map
 *.exe
-*.out
-```
+*.elf
+__pycache__/
+*.pyc
 
-源码、配置、文档进 Git；构建产物通常不进 Git。
+# IDE files
+.vscode/
+.idea/
 
----
-
-# Commit 粒度
-
-好的 commit：
-
-```text
-Add LED and counter desktop demo
-Document manual build commands
-Add minimal startup code and linker script
-```
-
-不好的 commit：
-
-```text
-update
-fix
-aaa
-today work
+# OS files
+.DS_Store
+Thumbs.db
 ```
 
 ---
