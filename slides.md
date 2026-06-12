@@ -2223,6 +2223,157 @@ void Led_Toggle(Led *self);
 
 ---
 
+# 模拟虚表：`ops` 表
+
+C 里可以用函数指针表模拟“同一接口，不同实现”。
+
+```c
+typedef struct LedBase LedBase;
+
+typedef struct {
+  void (*on)(LedBase *self);
+  void (*off)(LedBase *self);
+  void (*toggle)(LedBase *self);
+} LedOps;
+
+struct LedBase {
+  const LedOps *ops;
+};
+```
+
+`ops` 表类似 C++ 对象里的虚表概念，但需要手动维护。
+
+---
+
+# Base 指针
+
+把公共字段放在结构体第一项，可以用 base 指针访问公共接口。
+
+```c
+typedef struct {
+  LedBase base;
+  const char *name;
+  int state;
+} DesktopLed;
+
+typedef struct {
+  LedBase base;
+  GPIO_TypeDef *port;
+  uint16_t pin;
+} Stm32Led;
+```
+
+调用侧只需要 `LedBase *`。
+
+---
+
+# 通过接口调用
+
+```c
+void Led_Toggle(LedBase *led) {
+  led->ops->toggle(led);
+}
+
+void App_Run(LedBase *status_led) {
+  Led_Toggle(status_led);
+}
+```
+
+实际对象可以是：
+
+```c
+DesktopLed desktop_led;
+Stm32Led stm32_led;
+```
+
+应用层依赖接口，底层对象决定具体行为。
+
+---
+
+# 回到具体对象
+
+具体实现函数内部再把 `LedBase *` 转回自己的类型。
+
+```c
+static void DesktopLed_Toggle(LedBase *base) {
+  DesktopLed *self = (DesktopLed *)base;
+  self->state = !self->state;
+}
+
+static const LedOps desktop_led_ops = {
+  .toggle = DesktopLed_Toggle,
+};
+```
+
+要求 `base` 是结构体第一项，这样地址才一致。
+
+---
+
+# 课后扩展：`container_of`
+
+如果 `base` 不在结构体第一项，直接强制转换就不成立。
+
+更通用的写法是根据成员地址反推出外层对象地址。
+
+```c
+#include <stddef.h>
+
+#define container_of(ptr, type, member) \
+  ((type *)((char *)(ptr) - offsetof(type, member)))
+```
+
+`offsetof(type, member)` 计算成员在结构体里的偏移。
+
+---
+
+# `container_of` 示例
+
+```c
+static void DesktopLed_Toggle(LedBase *base) {
+  DesktopLed *self = container_of(base, DesktopLed, base);
+  self->state = !self->state;
+}
+```
+
+这里的含义是：
+
+- `base` 是成员指针
+- `DesktopLed` 是外层结构体类型
+- 第三个 `base` 是成员名
+
+这是 Linux kernel 等 C 工程里常见的高级写法。
+
+---
+
+# 几个相关操作
+
+| 操作 | 含义 | 示例 |
+| --- | --- | --- |
+| upcast | 具体对象转 base 指针 | `LedBase *p = &led->base;` |
+| downcast | base 指针转具体对象 | `container_of(p, DesktopLed, base)` |
+| type tag | 运行时区分对象类型 | `led->kind == LED_DESKTOP` |
+| magic value | 检查指针是否指向合法对象 | `led->magic == LED_MAGIC` |
+
+这些技巧可以扩展阅读，本节只要求理解 `struct + ops + base`。
+
+---
+
+# `ops` 表的调用关系
+
+```mermaid
+flowchart LR
+  APP["App_Run"] --> BASE["LedBase *"]
+  BASE --> OPS["LedOps"]
+  OPS --> D["DesktopLed_Toggle"]
+  OPS --> S["Stm32Led_Toggle"]
+  D --> PC["printf / state"]
+  S --> GPIO["HAL_GPIO_TogglePin"]
+```
+
+这就是 C 里的手动多态。
+
+---
+
 # `.h` 和 `.c` 的边界
 
 `.h`：
@@ -2245,8 +2396,6 @@ void Led_Toggle(Led *self);
 - 代码边界清楚
 - 方便替换底层实现
 - 后续更容易测试和移植
-
-不是为了把 C 写成 C++，而是为了管理复杂度。
 
 ---
 layout: section
