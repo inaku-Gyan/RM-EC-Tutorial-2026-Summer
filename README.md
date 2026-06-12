@@ -1,4 +1,4 @@
-# Lec 1 Foundation
+# Foundation of Embedded C Development
 
 RoboMaster Summer Camp 2026 第一讲课件：嵌入式 C 开发基础。
 
