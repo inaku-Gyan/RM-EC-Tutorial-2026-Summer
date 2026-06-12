@@ -1460,171 +1460,6 @@ arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb \
 | LLVM bare-metal     | 可用，但配置更复杂                 |
 
 ---
-
-# Project 2 补充：外设配置的底层原理
-
-本页开始只做实例讲解，不现场实操。
-
-目标是理解：
-
-```text
-配置外设 = 按参考手册要求读写寄存器
-```
-
-HAL、LL、CMSIS 和手写寄存器代码，本质上都在操作这些地址。
-
----
-
-# 外设寄存器是内存地址
-
-在 Cortex-M MCU 里，外设寄存器通常映射到固定内存地址。
-
-```mermaid
-flowchart LR
-  CPU["CPU load/store"] --> BUS["AHB / APB bus"]
-  BUS --> REG["Peripheral registers"]
-  REG --> GPIO["GPIO / UART / TIM / SPI"]
-  GPIO --> PIN["Physical pins"]
-```
-
-对 C 代码来说，访问寄存器就是访问一个 `volatile` 指针。
-
----
-
-# 示例：寄存器地址定义
-
-下面示例使用 STM32F4 常见地址，演示 `GPIOD` 的一个输出引脚。
-
-```c
-#include <stdint.h>
-
-#define REG32(addr) (*(volatile uint32_t *)(addr))
-
-#define RCC_BASE        0x40023800UL
-#define GPIOD_BASE      0x40020C00UL
-
-#define RCC_AHB1ENR     REG32(RCC_BASE + 0x30UL)
-#define GPIOD_MODER     REG32(GPIOD_BASE + 0x00UL)
-#define GPIOD_ODR       REG32(GPIOD_BASE + 0x14UL)
-#define GPIOD_BSRR      REG32(GPIOD_BASE + 0x18UL)
-```
-
-这些地址来自芯片参考手册，不是 C 语言自己规定的。
-
----
-
-# 第一步：打开外设时钟
-
-STM32 外设默认不一定有时钟。
-
-使用 `GPIOD` 前，需要先打开 `RCC` 里的对应时钟位。
-
-```c
-#define RCC_AHB1ENR_GPIODEN (1U << 3)
-
-static void GPIOD_EnableClock(void) {
-  RCC_AHB1ENR |= RCC_AHB1ENR_GPIODEN;
-}
-```
-
-如果外设时钟没开，后续配置寄存器通常不会得到预期效果。
-
----
-
-# 第二步：配置 GPIO 模式
-
-以 `PD12` 为例，把 pin mode 配成通用输出模式。
-
-```c
-#define LED_PIN 12U
-
-static void PD12_ConfigOutput(void) {
-  uint32_t shift = LED_PIN * 2U;
-
-  GPIOD_MODER &= ~(3U << shift);
-  GPIOD_MODER |=  (1U << shift);
-}
-```
-
-`MODER` 每个引脚占 2 bit，所以 `PD12` 对应 bit 24 和 bit 25。
-
----
-
-# 第三步：写 GPIO 输出
-
-`BSRR` 常用于原子置位和复位。
-
-```c
-static void PD12_On(void) {
-  GPIOD_BSRR = (1U << LED_PIN);
-}
-
-static void PD12_Off(void) {
-  GPIOD_BSRR = (1U << (LED_PIN + 16U));
-}
-
-static void PD12_Toggle(void) {
-  GPIOD_ODR ^= (1U << LED_PIN);
-}
-```
-
-真实项目里要继续考虑电气连接、默认电平、速度、上下拉和复用功能。
-
----
-
-# 合起来看
-
-```c
-void Led_LowLevelInit(void) {
-  GPIOD_EnableClock();
-  PD12_ConfigOutput();
-}
-
-void Led_Toggle(void) {
-  PD12_Toggle();
-}
-```
-
-这就是最小的寄存器级 GPIO 控制流程：
-
-```text
-开时钟 -> 配模式 -> 写输出寄存器
-```
-
----
-
-# HAL / LL 做了什么
-
-HAL 写法可能是：
-
-```c
-__HAL_RCC_GPIOD_CLK_ENABLE();
-
-GPIO_InitTypeDef init = {0};
-init.Pin = GPIO_PIN_12;
-init.Mode = GPIO_MODE_OUTPUT_PP;
-init.Pull = GPIO_NOPULL;
-init.Speed = GPIO_SPEED_FREQ_LOW;
-HAL_GPIO_Init(GPIOD, &init);
-
-HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12);
-```
-
-它最终仍然会写 `RCC` 和 `GPIO` 相关寄存器。
-
----
-
-# 看寄存器代码时关注什么
-
-- `volatile`：告诉编译器每次都要真实访问内存地址
-- bit mask：用位运算修改某几个 bit
-- read-modify-write：先读寄存器，再清位或置位
-- clock enable：很多外设必须先开时钟
-- reference manual：寄存器地址、偏移和 bit 定义的来源
-
-后续使用 CubeMX 和 HAL 时，仍然要知道这些配置最后落到哪里。
-
----
 layout: section
 ---
 
@@ -1878,7 +1713,180 @@ Project 2 仍然不是完整 STM32 应用。
 layout: section
 ---
 
-# 5 - CubeMX 生成项目
+# 5 - 外设寄存器
+
+从 GPIO 示例理解外设配置的底层原理
+
+---
+
+# 外设配置的底层原理
+
+本页开始只做实例讲解，不现场实操。
+
+目标是理解：
+
+```text
+配置外设 = 按参考手册要求读写寄存器
+```
+
+HAL、LL、CMSIS 和手写寄存器代码，本质上都在操作这些地址。
+
+---
+
+# 外设寄存器是内存地址
+
+在 Cortex-M MCU 里，外设寄存器通常映射到固定内存地址。
+
+```mermaid
+flowchart LR
+  CPU["CPU load/store"] --> BUS["AHB / APB bus"]
+  BUS --> REG["Peripheral registers"]
+  REG --> GPIO["GPIO / UART / TIM / SPI"]
+  GPIO --> PIN["Physical pins"]
+```
+
+对 C 代码来说，访问寄存器就是访问一个 `volatile` 指针。
+
+---
+
+# 示例：寄存器地址定义
+
+下面示例使用 STM32F4 常见地址，演示 `GPIOD` 的一个输出引脚。
+
+```c
+#include <stdint.h>
+
+#define REG32(addr) (*(volatile uint32_t *)(addr))
+
+#define RCC_BASE        0x40023800UL
+#define GPIOD_BASE      0x40020C00UL
+
+#define RCC_AHB1ENR     REG32(RCC_BASE + 0x30UL)
+#define GPIOD_MODER     REG32(GPIOD_BASE + 0x00UL)
+#define GPIOD_ODR       REG32(GPIOD_BASE + 0x14UL)
+#define GPIOD_BSRR      REG32(GPIOD_BASE + 0x18UL)
+```
+
+这些地址来自芯片参考手册，不是 C 语言自己规定的。
+
+---
+
+# 第一步：打开外设时钟
+
+STM32 外设默认不一定有时钟。
+
+使用 `GPIOD` 前，需要先打开 `RCC` 里的对应时钟位。
+
+```c
+#define RCC_AHB1ENR_GPIODEN (1U << 3)
+
+static void GPIOD_EnableClock(void) {
+  RCC_AHB1ENR |= RCC_AHB1ENR_GPIODEN;
+}
+```
+
+如果外设时钟没开，后续配置寄存器通常不会得到预期效果。
+
+---
+
+# 第二步：配置 GPIO 模式
+
+以 `PD12` 为例，把 pin mode 配成通用输出模式。
+
+```c
+#define LED_PIN 12U
+
+static void PD12_ConfigOutput(void) {
+  uint32_t shift = LED_PIN * 2U;
+
+  GPIOD_MODER &= ~(3U << shift);
+  GPIOD_MODER |=  (1U << shift);
+}
+```
+
+`MODER` 每个引脚占 2 bit，所以 `PD12` 对应 bit 24 和 bit 25。
+
+---
+
+# 第三步：写 GPIO 输出
+
+`BSRR` 常用于原子置位和复位。
+
+```c
+static void PD12_On(void) {
+  GPIOD_BSRR = (1U << LED_PIN);
+}
+
+static void PD12_Off(void) {
+  GPIOD_BSRR = (1U << (LED_PIN + 16U));
+}
+
+static void PD12_Toggle(void) {
+  GPIOD_ODR ^= (1U << LED_PIN);
+}
+```
+
+真实项目里要继续考虑电气连接、默认电平、速度、上下拉和复用功能。
+
+---
+
+# 合起来看
+
+```c
+void Led_LowLevelInit(void) {
+  GPIOD_EnableClock();
+  PD12_ConfigOutput();
+}
+
+void Led_Toggle(void) {
+  PD12_Toggle();
+}
+```
+
+这就是最小的寄存器级 GPIO 控制流程：
+
+```text
+开时钟 -> 配模式 -> 写输出寄存器
+```
+
+---
+
+# HAL / LL 做了什么
+
+HAL 写法可能是：
+
+```c
+__HAL_RCC_GPIOD_CLK_ENABLE();
+
+GPIO_InitTypeDef init = {0};
+init.Pin = GPIO_PIN_12;
+init.Mode = GPIO_MODE_OUTPUT_PP;
+init.Pull = GPIO_NOPULL;
+init.Speed = GPIO_SPEED_FREQ_LOW;
+HAL_GPIO_Init(GPIOD, &init);
+
+HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12);
+```
+
+它最终仍然会写 `RCC` 和 `GPIO` 相关寄存器。
+
+---
+
+# 看寄存器代码时关注什么
+
+- `volatile`：告诉编译器每次都要真实访问内存地址
+- bit mask：用位运算修改某几个 bit
+- read-modify-write：先读寄存器，再清位或置位
+- clock enable：很多外设必须先开时钟
+- reference manual：寄存器地址、偏移和 bit 定义的来源
+
+后续使用 CubeMX 和 HAL 时，仍然要知道这些配置最后落到哪里。
+
+---
+layout: section
+---
+
+# 6 - CubeMX 生成项目
 
 完整的 STM32 工程
 
@@ -2330,7 +2338,7 @@ EIDE 中必须指向它。
 layout: section
 ---
 
-# 6 - C 语言 OOP
+# 7 - C 语言 OOP
 
 嵌入式 C 里的模块化写法
 
