@@ -21,15 +21,15 @@ RM Summer Camp 2026
 
 # 课程大纲
 
-| 章节 | 内容 | 课堂形式 |
-| --- | --- | --- |
-| 1 | Git 基础 | 讲解 + 实操 |
-| 2 | 桌面端 C 工程构建 | 教师演示 |
-| 3 | 从桌面端到嵌入式 | 教师演示 |
-| 4 | EIDE | 教师演示 |
-| 5 | 外设寄存器 | 实例讲解 |
-| 6 | CubeMX 生成项目 | 学生跟做 |
-| 7 | C 语言 OOP | 讲解 + 代码范式 |
+| 章节 | 内容 |
+| --- | --- |
+| 1 | Git 基础 |
+| 2 | 桌面端 C 工程构建 |
+| 3 | 从桌面端到嵌入式 |
+| 4 | EIDE |
+| 5 | 外设寄存器 |
+| 6 | CubeMX 生成项目 |
+| 7 | C 语言 OOP |
 
 ---
 layout: section
@@ -1487,19 +1487,19 @@ layout: section
 实际路径：
 
 ```text
-../demo-projects/baremetal-arm-build-EIDE
+../demo-projects/proj-2
 ```
 
 关键文件：
 
 ```text
-baremetal-arm-build-EIDE/
+proj-2/
 ├── .eide/
 │   ├── eide.yml
 │   └── files.options.yml
 ├── .vscode/
 │   └── tasks.json
-└── baremetal-arm-build-EIDE.code-workspace
+└── proj-2.code-workspace
 ```
 
 ---
@@ -1537,7 +1537,7 @@ EIDE project config
 
 ```yaml
 version: "4.1"
-name: baremetal-arm-build-EIDE
+name: proj-2
 type: ARM
 srcDirs:
   - src
