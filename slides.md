@@ -815,7 +815,7 @@ gcc -Iinclude src/main.c src/led.c src/counter.c \
 `-Iinclude` 把 `include/` 加入头文件搜索路径。
 
 ```text
-desktop-c-build/
+proj-1/
 ├── include/
 │   ├── counter.h
 │   └── led.h
@@ -2109,7 +2109,7 @@ flowchart LR
 生成后重点看结构，不急着改代码：
 
 ```text
-stm32-cubemx-eide/
+proj-3/
 ├── Core/
 │   ├── Inc/
 │   └── Src/
@@ -2172,7 +2172,7 @@ LL: Low Layer
 CubeMX 生成：
 
 ```text
-stm32-cubemx-eide/
+proj-3/
 ├── startup_stm32f407xx.s
 └── STM32F407xx_FLASH.ld
 ```
@@ -2245,7 +2245,7 @@ git diff
 要包含：
 
 ```text
-stm32-cubemx-eide/
+proj-3/
 ├── Core/
 │   └── Src/
 │       └── *.c
@@ -2265,7 +2265,7 @@ stm32-cubemx-eide/
 常见 include：
 
 ```text
-stm32-cubemx-eide/
+proj-3/
 ├── Core/
 │   └── Inc/
 └── Drivers/
@@ -2302,7 +2302,7 @@ STM32F407xx
 真实 CubeMX 工程通常有：
 
 ```text
-stm32-cubemx-eide/
+proj-3/
 └── STM32F407xx_FLASH.ld
 ```
 
