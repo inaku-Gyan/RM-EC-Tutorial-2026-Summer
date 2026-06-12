@@ -167,15 +167,12 @@ desktop-c-build/
 # `led.h`
 
 ```c
-#ifndef LED_H
-#define LED_H
+#pragma once
 
 void led_on(void);
 void led_off(void);
 void led_toggle(void);
 int led_get_state(void);
-
-#endif
 ```
 
 头文件描述“别人可以怎么用我”。
@@ -185,14 +182,11 @@ int led_get_state(void);
 # `counter.h`
 
 ```c
-#ifndef COUNTER_H
-#define COUNTER_H
+#pragma once
 
 void counter_init(int value);
 int counter_increment(void);
 int counter_get(void);
-
-#endif
 ```
 
 `.h` 放接口，`.c` 放实现。
