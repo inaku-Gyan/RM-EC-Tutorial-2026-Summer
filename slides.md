@@ -1909,7 +1909,7 @@ layout: section
 
 - CubeMX 选择芯片/开发板
 - 配置基础时钟
-- 配置一个 GPIO 输出
+- 配置 3 个 GPIO 输出
 - 生成 STM32 工程
 - 识别 CMSIS / HAL / startup / linker
 - 配置或导入 EIDE
@@ -2050,15 +2050,17 @@ flowchart TB
 
 # Step 2: 配置 GPIO
 
-目标：一个 LED 输出。
+目标：配置 RGB LED 的 3 个输出引脚。
 
-CubeMX 中：
+按照课程开发板原理图配置：
 
-```text
-Pin mode: GPIO_Output
-Label: LED_STATUS
-Initial level: Low
-```
+| 功能类型 | 网络名 | 对应 IO | Pin mode | Initial level |
+| --- | --- | --- | --- | --- |
+| LED | `LED_R` | `PH12` | `GPIO_Output` | Low |
+| LED | `LED_G` | `PH11` | `GPIO_Output` | Low |
+| LED | `LED_B` | `PH10` | `GPIO_Output` | Low |
+
+CubeMX 里把 `PH12`、`PH11`、`PH10` 都设置为 `GPIO_Output`，并分别填写 user label。
 
 ---
 
@@ -2188,7 +2190,11 @@ stm32-cubemx-eide/
 /* USER CODE BEGIN WHILE */
 while (1)
 {
-  HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
+  HAL_GPIO_TogglePin(LED_R_GPIO_Port, LED_R_Pin);
+  HAL_Delay(200);
+  HAL_GPIO_TogglePin(LED_G_GPIO_Port, LED_G_Pin);
+  HAL_Delay(200);
+  HAL_GPIO_TogglePin(LED_B_GPIO_Port, LED_B_Pin);
   HAL_Delay(500);
 }
 /* USER CODE END WHILE */
@@ -2342,7 +2348,7 @@ EIDE 中必须指向它。
 
 - CubeMX 工程能打开
 - EIDE 工程能编译
-- LED blink 代码在 `USER CODE` 区域
+- RGB LED blink 代码在 `USER CODE` 区域
 - Git 里没有提交 `build/`
 - README 写清楚怎么编译和烧录
 - GitHub 链接可访问
