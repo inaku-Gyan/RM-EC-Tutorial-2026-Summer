@@ -598,6 +598,8 @@ HTTPS 更直观；SSH 更适合长期开发。
 | `git worktree` | 一个仓库多个工作目录 |
 | Git hooks | 在 commit/push 前后执行脚本 |
 
+一个有趣的网站：https://learngitbranching.js.org/
+
 ---
 layout: section
 ---
@@ -608,7 +610,62 @@ Example Project 1
 
 ---
 
-# Example Project 1 文件结构
+# C/C++ 标准与实现
+
+标准不是编译器。
+
+| 层次 | 作用 |
+| --- | --- |
+| ISO C / C++ 标准 | 定义语言规则和标准库接口 |
+| 编译器实现 | 把源代码翻译成目标平台代码 |
+| 标准库实现 | 提供 `printf`、`malloc`、`std::vector` 等函数和类型 |
+| 平台与 ABI | 规定函数调用、对象格式、链接方式 |
+
+---
+
+# 一个实现包含什么
+
+```mermaid
+flowchart LR
+  SRC["C/C++ source"] --> PP["preprocessor"]
+  PP --> CC["compiler"]
+  CC --> AS["assembler"]
+  AS --> OBJ["object files"]
+  OBJ --> LD["linker"]
+  LD --> BIN["program / firmware"]
+
+  LIB["standard library"] --> LD
+  ABI["target ABI"] --> CC
+  ABI --> LD
+```
+
+常见实现组合：
+
+- GCC + glibc / newlib / libstdc++
+- Clang + libc / libc++
+- MSVC + Windows SDK
+
+---
+
+# 标准保证什么
+
+标准保证：
+
+- `int main(void)` 的语言语义
+- `#include <stdio.h>` 这样的标准库接口
+- 表达式、控制流、类型系统的基本规则
+
+标准不保证：
+
+- `int` 一定是 32 bit
+- 可执行文件一定是 ELF / PE / Mach-O
+- 裸机环境一定有 `printf`
+- 同一段代码在所有目标平台生成相同机器码
+
+
+---
+
+# Example Project 1
 
 ```text
 proj-1/
@@ -692,13 +749,25 @@ int main(void) {
 mkdir -p build
 
 gcc -Iinclude src/main.c src/led.c src/counter.c \
-  -o build/desktop-demo
+  -o build/main
 ```
 
 这条命令内部会完成：
 
-```text
-preprocess -> compile -> assemble -> link
+```mermaid
+flowchart LR
+  H[include/*.h<br/>声明] -. 被包含 .-> M[src/main.c]
+  H -. 被包含 .-> L[src/led.c]
+  H -. 被包含 .-> C[src/counter.c]
+
+  M --> MO[build/main.o]
+  L --> LO[build/led.o]
+  C --> CO[build/counter.o]
+
+  MO --> LD[链接器 linker]
+  LO --> LD
+  CO --> LD
+  LD --> APP[build/main]
 ```
 
 ---
@@ -706,7 +775,7 @@ preprocess -> compile -> assemble -> link
 # 运行结果
 
 ```bash
-./build/desktop-demo
+./build/main
 ```
 
 ```text
@@ -727,15 +796,75 @@ final counter = 2
 
 ```bash
 gcc -Iinclude src/main.c src/led.c src/counter.c \
-  -o build/desktop-demo
+  -o build/main
 ```
 
-`-Iinclude` 告诉编译器：
+`-Iinclude` 把 `include/` 加入头文件搜索路径。
 
 ```text
-遇到 #include "led.h"
-去 include/ 目录里找
+desktop-c-build/
+├── include/
+│   ├── counter.h
+│   └── led.h
+└── src/
+    ├── counter.c
+    ├── led.c
+    └── main.c
 ```
+
+每个 `.c` 文件都是独立编译单元，都会独立处理自己的 `#include`。
+
+---
+
+# 引号形式：`#include "..."`
+
+```c
+#include "led.h"
+```
+
+常见搜索顺序：
+
+```text
+1. 当前源文件所在目录
+2. `-I` 指定的目录
+3. 编译器默认系统目录
+```
+
+适合包含项目自己的头文件。
+
+---
+
+# 尖括号形式：`#include <...>`
+
+```c
+#include <stdio.h>
+```
+
+常见搜索顺序：
+
+```text
+1. `-I` 指定的目录
+2. 编译器默认系统目录
+```
+
+适合包含标准库、SDK 或工具链提供的头文件。
+
+---
+
+# 本项目的 include 搜索
+
+编译 `src/main.c` 时：
+
+```mermaid
+flowchart LR
+  A["src/main.c"] --> B["#include &quot;led.h&quot;"]
+  B --> C{搜索}
+  C --> D["src/led.h"]
+  C --> E["include/led.h"]
+  E --> F["找到声明"]
+```
+
+`src/led.h` 不存在，所以需要 `-Iinclude`。
 
 ---
 
@@ -745,7 +874,7 @@ gcc -Iinclude src/main.c src/led.c src/counter.c \
 
 ```bash
 gcc src/main.c src/led.c src/counter.c \
-  -o build/desktop-demo
+  -o build/main
 ```
 
 可能看到：
@@ -764,7 +893,7 @@ fatal error: led.h: No such file or directory
 
 ```bash
 gcc -Iinclude src/main.c src/led.c \
-  -o build/desktop-demo
+  -o build/main
 ```
 
 可能看到：
@@ -783,7 +912,7 @@ undefined reference to `counter_init`
 #include "counter.h"
 ```
 
-这只解决：
+解决：
 
 ```text
 编译器能不能看懂函数声明
@@ -824,8 +953,6 @@ gcc -Iinclude -S src/main.c -o build/main.s
 ```text
 C code -> assembly
 ```
-
-课堂只看“存在这个阶段”，不深入汇编语法。
 
 ---
 
@@ -911,27 +1038,12 @@ clangd 需要知道：
 工程能编译但编辑器红线很多，通常是 clangd 没拿到正确构建参数。
 
 ---
-
-# Project 1 的 Git 节奏
-
-```text
-Initialize desktop C build example
-Add LED and counter desktop demo
-Split LED and counter into modules
-Document manual build commands
-```
-
-演示时每完成一个可解释状态，就做一次 commit。
-
----
 layout: section
 ---
 
-# Project 2
+# 从桌面端到嵌入式
 
-`baremetal-arm-build`
-
-教师详细演示：从桌面端 C 到 Cortex-M4 固件
+Example Project 2
 
 ---
 
@@ -1064,7 +1176,7 @@ arm-none-eabi-size build/firmware.elf
 ```mermaid
 flowchart TB
   subgraph Desktop
-    A[gcc] --> B[desktop-demo]
+    A[gcc] --> B[main]
     B --> C[OS loader]
     C --> D[main]
   end
