@@ -1,6 +1,6 @@
 ---
 theme: dracula
-title: "Lec 1 Foundation"
+title: "Foundation of Embedded C Development"
 info: |
   RoboMaster Summer Camp 2026 - Embedded C development foundation:
   Git, C toolchains, manual builds, EIDE, CubeMX, and STM32 project structure.
