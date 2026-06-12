@@ -23,7 +23,7 @@ layout: section
 ---
 
 
-# Git 基础
+# 1 - Git 基础
 
 本地历史、分支与远程同步
 
@@ -604,7 +604,7 @@ HTTPS 更直观；SSH 更适合长期开发。
 layout: section
 ---
 
-# 桌面端 C 工程构建
+# 2 - 桌面端 C 工程构建
 
 Example Project 1
 
@@ -1041,7 +1041,7 @@ clangd 需要知道：
 layout: section
 ---
 
-# 从桌面端到嵌入式
+# 3 - 从桌面端到嵌入式
 
 Example Project 2
 
@@ -1628,9 +1628,9 @@ HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12);
 layout: section
 ---
 
-# Project 2 EIDE
+# 4 - EIDE
 
-教师详细演示：自动构建系统不是魔法
+从手动构建到自动构建
 
 ---
 
@@ -1878,7 +1878,7 @@ Project 2 仍然不是完整 STM32 应用。
 layout: section
 ---
 
-# Example Project 3
+# 5 - CubeMX 生成项目
 
 完整的 STM32 工程
 
@@ -2330,7 +2330,7 @@ EIDE 中必须指向它。
 layout: section
 ---
 
-# C OOP 范式
+# 6 - C 语言 OOP
 
 嵌入式 C 里的模块化写法
 
