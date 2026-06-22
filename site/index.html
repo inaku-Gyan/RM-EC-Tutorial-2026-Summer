@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Slidev Decks</title>
+    <link rel="stylesheet" href="{{BASE_PATH}}styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="site-header">
+        <p class="eyebrow">Slidev Project Template</p>
+        <h1>Slidev Decks</h1>
+        <p>
+          Choose a presentation from this project. Each deck is built from its
+          own directory and published as a separate static route.
+        </p>
+      </header>
+
+      <section class="deck-grid" aria-label="Presentations">
+        {{DECK_CARDS}}
+      </section>
+    </main>
+  </body>
+</html>

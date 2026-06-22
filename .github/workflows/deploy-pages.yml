@@ -4,20 +4,25 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "README.md"
+      - "LICENSE"
+      - ".vscode/**"
+      - ".agents/**"
+      - "skills-lock.json"
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -25,8 +30,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 11.6.0
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -49,7 +52,7 @@ jobs:
           fi
 
       - name: Build
-        run: pnpm run build:pages
+        run: pnpm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
@@ -57,11 +60,17 @@ jobs:
           path: dist
 
   deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: build
+
+    permissions:
+      pages: write
+      id-token: write
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
 
     steps:
       - name: Deploy to GitHub Pages

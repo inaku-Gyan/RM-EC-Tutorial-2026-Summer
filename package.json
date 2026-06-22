@@ -1,18 +1,26 @@
 {
-  "name": "foundation-of-embedded-c-development",
+  "name": "slidev-project-template",
   "type": "module",
   "private": true,
-  "packageManager": "pnpm@11.6.0",
+  "packageManager": "pnpm@11.8.0",
   "scripts": {
-    "dev": "slidev --open",
-    "serve": "slidev --port 3030 --remote",
-    "build": "slidev build",
-    "build:pages": "slidev build --base \"${BASE_PATH:-/}\"",
-    "export": "slidev export"
+    "dev": "node scripts/dev-site.mjs",
+    "preview": "vite preview --host 0.0.0.0 --outDir dist --open",
+    "build": "node scripts/build-site.mjs",
+    "export": "node scripts/export-deck.mjs",
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check .",
+    "skills:install": "skills experimental_install",
+    "skills:list": "skills list",
+    "skills:update": "skills update -p -y"
   },
   "devDependencies": {
     "@slidev/cli": "52.15.2",
     "@slidev/theme-default": "^0.25.0",
-    "slidev-theme-dracula": "^0.2.0"
+    "prettier": "^3.8.4",
+    "prettier-plugin-slidev": "^1.0.5",
+    "skills": "1.5.11",
+    "slidev-theme-dracula": "^0.2.0",
+    "yaml": "^2.9.0"
   }
 }
