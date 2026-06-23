@@ -122,43 +122,110 @@ async function ensurePortsAvailable(decks) {
 }
 
 function startSlidevDeck(deck, port) {
-  let markReady;
-  let readyOutput = "";
-  const ready = new Promise((resolve) => {
-    markReady = resolve;
-  });
   const entry = relative(root, deck.entry);
   const child = spawn(
     slidevBin,
     [entry, "--port", String(port), "--base", `/${deck.route}/`],
     {
       cwd: root,
-      stdio: ["inherit", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
     },
   );
+  const output = [];
+  let readySettled = false;
+  let readyTimer;
+  let pollTimer;
+  let markReady;
+  let failReady;
+  const ready = new Promise((resolve, reject) => {
+    markReady = () => {
+      if (readySettled) {
+        return;
+      }
+
+      readySettled = true;
+      clearTimeout(readyTimer);
+      clearTimeout(pollTimer);
+      resolve();
+    };
+    failReady = (error) => {
+      if (readySettled) {
+        return;
+      }
+
+      readySettled = true;
+      clearTimeout(readyTimer);
+      clearTimeout(pollTimer);
+      reject(error);
+    };
+  });
+
+  function rememberOutput(chunk) {
+    output.push(String(chunk));
+
+    while (output.join("").length > 4000) {
+      output.shift();
+    }
+  }
+
+  function readinessError(message) {
+    const details = output.join("").trim();
+
+    return new Error(details ? `${message}\n\n${details}` : message);
+  }
+
+  function pollUntilListening() {
+    const socket = netConnect(port, host);
+
+    socket.once("connect", () => {
+      socket.end();
+      markReady();
+    });
+    socket.once("error", () => {
+      socket.destroy();
+
+      if (!readySettled) {
+        pollTimer = setTimeout(pollUntilListening, 100);
+      }
+    });
+  }
+
+  readyTimer = setTimeout(() => {
+    failReady(
+      readinessError(
+        `Timed out waiting for Slidev dev server "${deck.slug}" on port ${port}.`,
+      ),
+    );
+  }, 30_000);
+  pollUntilListening();
 
   child.stdout?.on("data", (chunk) => {
-    readyOutput += chunk;
-
-    if (/\n\s*shortcuts\s*>/.test(readyOutput)) {
-      markReady();
-    }
+    rememberOutput(chunk);
   });
 
   child.stderr?.on("data", (chunk) => {
+    rememberOutput(chunk);
     process.stderr.write(chunk);
   });
 
   child.once("exit", (code, signal) => {
-    markReady();
-
     if (shuttingDown) {
       return;
     }
 
     const normalStop =
       code === 0 || signal === "SIGINT" || signal === "SIGTERM";
+
+    if (!readySettled) {
+      const reason = signal ? `signal ${signal}` : `exit code ${code}`;
+      failReady(
+        readinessError(
+          `Slidev dev server for "${deck.slug}" stopped before it was ready with ${reason}.`,
+        ),
+      );
+      return;
+    }
 
     if (!normalStop) {
       const reason = signal ? `signal ${signal}` : `exit code ${code}`;
@@ -309,15 +376,7 @@ function printDevServerSummary(routeByPath) {
   }
   console.log("");
   console.log(
-    `  ${label("shortcuts")} ${pointer} ${[
-      shortcut("restart", "r"),
-      gray("|"),
-      shortcut("open", "o"),
-      gray("|"),
-      shortcut("edit", "e"),
-      gray("|"),
-      shortcut("quit", "q"),
-    ].join(" ")}`,
+    `  ${label("stop server")} ${pointer} ${shortcut("Ctrl+C", "Ctrl+C")}`,
   );
 }
 
