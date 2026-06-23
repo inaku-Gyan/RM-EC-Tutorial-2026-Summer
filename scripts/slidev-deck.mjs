@@ -26,7 +26,13 @@ try {
   process.exit(1);
 }
 
-const result = runSlidev([relative(root, deck.entry), "--open", ...slidevArgs]);
+const result = runSlidev([
+  relative(root, deck.entry),
+  "--open",
+  "--base",
+  `/${deck.route}/`,
+  ...slidevArgs,
+]);
 
 if (result.error) {
   throw result.error;

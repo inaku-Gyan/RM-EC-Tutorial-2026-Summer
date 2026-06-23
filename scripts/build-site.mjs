@@ -56,8 +56,8 @@ async function renderNotFoundPage(basePath) {
 }
 
 function runSlidevBuild(deck, basePath) {
-  const outputDir = join(distDir, deck.slug);
-  const deckBase = `${basePath}${deck.slug}/`;
+  const outputDir = join(distDir, deck.route);
+  const deckBase = `${basePath}${deck.route}/`;
   const entry = relative(root, deck.entry);
   const output = relative(root, outputDir);
 
@@ -94,8 +94,8 @@ async function main() {
   for (const deck of decks) {
     runSlidevBuild(deck, basePath);
     await writeFile(
-      join(distDir, `${deck.slug}.html`),
-      renderRedirectPage(`${basePath}${deck.slug}/`, deck.title),
+      join(distDir, `${deck.route}.html`),
+      renderRedirectPage(`${basePath}${deck.route}/`, deck.title),
     );
   }
 

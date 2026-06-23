@@ -24,7 +24,12 @@ export const slidevBin = join(
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const pathLikePattern = /[\\/]|\.md$/i;
-const allowedDeckConfigKeys = new Set(["$schema", "order", "visibility"]);
+const allowedDeckConfigKeys = new Set([
+  "$schema",
+  "order",
+  "route",
+  "visibility",
+]);
 const visibilityValues = new Set(["listed", "hidden", "disabled"]);
 
 export function normalizeBasePath(value) {
@@ -47,10 +52,10 @@ export function escapeHtml(value) {
 export function renderDeckCards(decks, basePath = "/") {
   return decks
     .map((deck) => {
-      const href = `${basePath}${deck.slug}/`;
+      const href = `${basePath}${deck.route}/`;
 
       return `<a class="deck-card" href="${escapeHtml(href)}">
-  <span class="deck-card__route">/${escapeHtml(deck.slug)}/</span>
+  <span class="deck-card__route">/${escapeHtml(deck.route)}/</span>
   <strong>${escapeHtml(deck.title)}</strong>
   <span>${escapeHtml(deck.description)}</span>
 </a>`;
@@ -126,6 +131,10 @@ function getVisibility(metadata) {
   return metadata.visibility ?? "listed";
 }
 
+function getRoute(slug, metadata) {
+  return metadata.route ?? slug;
+}
+
 function validateDeckConfig(slug, metadata) {
   if (!slugPattern.test(slug)) {
     throw new Error(
@@ -143,7 +152,7 @@ function validateDeckConfig(slug, metadata) {
 
   if (unknownKeys.length > 0) {
     throw new Error(
-      `${slug}/deck.json may only define $schema, order, and visibility. Move title and info to slides.md frontmatter.`,
+      `${slug}/deck.json may only define $schema, order, route, and visibility. Move title and info to slides.md frontmatter.`,
     );
   }
 
@@ -153,6 +162,15 @@ function validateDeckConfig(slug, metadata) {
 
   if (!Number.isInteger(metadata.order) || metadata.order < 1) {
     throw new Error(`${slug}/deck.json order must be a positive integer.`);
+  }
+
+  if (
+    metadata.route !== undefined &&
+    (typeof metadata.route !== "string" || !slugPattern.test(metadata.route))
+  ) {
+    throw new Error(
+      `${slug}/deck.json route must use lowercase letters, numbers, and single hyphens.`,
+    );
   }
 
   if (!visibilityValues.has(getVisibility(metadata))) {
@@ -219,6 +237,7 @@ async function readDeckConfig(slug) {
 
   return {
     order: metadata.order,
+    route: getRoute(slug, metadata),
     visibility: getVisibility(metadata),
   };
 }
@@ -240,6 +259,7 @@ export async function readDeck(slug) {
 
   return {
     slug,
+    route: metadata.route,
     title: frontmatter.title.trim(),
     description: normalizeDescription(frontmatter.info),
     order: metadata.order,
@@ -284,6 +304,22 @@ export function sortDecks(decks) {
   });
 }
 
+function validateUniqueRoutes(decks) {
+  const seenRoutes = new Map();
+
+  for (const deck of decks) {
+    const existingSlug = seenRoutes.get(deck.route);
+
+    if (existingSlug) {
+      throw new Error(
+        `Deck route "${deck.route}" is used by both "${existingSlug}" and "${deck.slug}".`,
+      );
+    }
+
+    seenRoutes.set(deck.route, deck.slug);
+  }
+}
+
 export async function discoverDecks() {
   const entries = await readdir(decksDir, { withFileTypes: true });
   const decks = [];
@@ -301,6 +337,8 @@ export async function discoverDecks() {
 
     decks.push(await readDeck(entry.name));
   }
+
+  validateUniqueRoutes(decks);
 
   if (decks.length === 0) {
     throw new Error(

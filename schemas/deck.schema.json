@@ -12,7 +12,12 @@
     "order": {
       "type": "integer",
       "minimum": 1,
-      "description": "Positive integer used to sort listed decks on the generated home page. Lower numbers appear first; decks with the same order fall back to sorting by slug."
+      "description": "Positive integer used to sort listed decks on the generated home page. Lower numbers appear first; decks with the same order fall back to sorting by directory slug."
+    },
+    "route": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "Optional public URL slug for this deck. Omit this field to use the directory slug. Use lowercase letters, numbers, and single hyphens."
     },
     "visibility": {
       "type": "string",

@@ -125,7 +125,7 @@ function startSlidevDeck(deck, port) {
   const entry = relative(root, deck.entry);
   const child = spawn(
     slidevBin,
-    [entry, "--port", String(port), "--base", `/${deck.slug}/`],
+    [entry, "--port", String(port), "--base", `/${deck.route}/`],
     {
       cwd: root,
       stdio: "inherit",
@@ -204,11 +204,11 @@ function proxyWebSocket(req, socket, head, targetPort) {
   });
 }
 
-function getDeckRoute(url, routeBySlug) {
+function getDeckRoute(url, routeByPath) {
   const pathname = new URL(url, `http://${host}:${sitePort}`).pathname;
-  const [, slug] = pathname.split("/");
+  const [, route] = pathname.split("/");
 
-  return routeBySlug.get(slug);
+  return routeByPath.get(route);
 }
 
 function watchDevFiles(decks, broadcastReload) {
@@ -274,13 +274,13 @@ async function main() {
   const startupDecks = await discoverDecks();
   await ensurePortsAvailable(startupDecks);
 
-  const routeBySlug = new Map(
+  const routeByPath = new Map(
     startupDecks.map((deck, index) => [
-      deck.slug,
+      deck.route,
       { deck, port: firstDeckPort + index },
     ]),
   );
-  for (const { deck, port } of routeBySlug.values()) {
+  for (const { deck, port } of routeByPath.values()) {
     children.push(startSlidevDeck(deck, port));
   }
 
@@ -310,14 +310,14 @@ async function main() {
         return;
       }
 
-      const route = getDeckRoute(req.url ?? "/", routeBySlug);
+      const route = getDeckRoute(req.url ?? "/", routeByPath);
 
       if (route) {
         const pathname = new URL(req.url ?? "/", `http://${host}:${sitePort}`)
           .pathname;
 
-        if (pathname === `/${route.deck.slug}`) {
-          res.writeHead(302, { location: `/${route.deck.slug}/` });
+        if (pathname === `/${route.deck.route}`) {
+          res.writeHead(302, { location: `/${route.deck.route}/` });
           res.end();
           return;
         }
@@ -342,7 +342,7 @@ async function main() {
   });
 
   server.on("upgrade", (req, socket, head) => {
-    const route = getDeckRoute(req.url ?? "/", routeBySlug);
+    const route = getDeckRoute(req.url ?? "/", routeByPath);
 
     if (!route) {
       socket.destroy();
@@ -354,8 +354,8 @@ async function main() {
 
   server.listen(sitePort, host, () => {
     console.log(`Slidev site dev server: http://${host}:${sitePort}/`);
-    for (const { deck, port } of routeBySlug.values()) {
-      console.log(`- /${deck.slug}/ -> http://${host}:${port}/${deck.slug}/`);
+    for (const { deck, port } of routeByPath.values()) {
+      console.log(`- /${deck.route}/ -> http://${host}:${port}/${deck.route}/`);
     }
   });
 }
