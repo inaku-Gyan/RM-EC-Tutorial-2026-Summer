@@ -1927,21 +1927,6 @@ layout: section
 
 ---
 
-# Step 1: 新建 CubeMX 工程
-
-选择方式：
-
-- 有固定开发板：优先 Board Selector
-- 自定义板：选择具体 MCU
-
-本课目标：
-
-```text
-STM32F407IGHx / 对应课程开发板
-```
-
----
-
 # STM32 名词分层
 
 ```mermaid
@@ -1961,8 +1946,8 @@ flowchart TB
 | 1. 指令集架构 | Arm / RISC-V / Xtensa / AVR |
 | 2. 处理器内核 | Cortex-M4 / Cortex-M7 / RV32IMC |
 | 3. 芯片系列 | STM32F1 / STM32F4 / STM32H7 |
-| 4. 具体型号 | STM32F407IGHx |
-| 5. 开发板 | 课程板 / Nucleo / Discovery |
+| 4. 具体型号 | STM32F407IGH6 |
+| 5. 开发板 | Nucleo / Discovery |
 | 6. 软件支持 | CMSIS / HAL / LL / RTOS |
 
 ```text
@@ -2032,16 +2017,16 @@ flowchart TB
 
 ---
 
-# 回到课程目标芯片
+# 课程目标芯片
 
 | 层级 | 本课对应 |
 | --- | --- |
 | 指令集 / 内核 | Arm Cortex-M4 |
 | MCU 系列 | STM32F4 |
-| 具体型号 | STM32F407IGHx |
-| 开发对象 | 课程开发板 |
-| 生成工具 | STM32CubeMX |
-| 工程管理 | EIDE + Arm GCC |
+| 具体型号 | STM32F407IGH6 |
+| 开发板 | RoboMaster C 板 |
+| 代码生成工具 | STM32CubeMX |
+| 工具链 | EIDE + Arm GCC |
 | 软件库 | CMSIS + HAL / LL |
 
 后续遇到配置项时，先判断它属于哪一层。
