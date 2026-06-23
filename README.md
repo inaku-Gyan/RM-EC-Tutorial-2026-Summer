@@ -1,29 +1,27 @@
-# Foundation of Embedded C Development
+# RM Embedded C
 
-RoboMaster Summer Camp 2026 第一讲课件：嵌入式 C 开发基础。
+RoboMaster Summer Camp 2026 嵌入式 C 开发课件合集。
 
-本仓库使用 [Slidev](https://sli.dev/) 维护课程幻灯片，内容覆盖 Git 基础、桌面端 C 工程构建、嵌入式工具链、EIDE、外设寄存器、CubeMX 生成项目，以及 C 语言中的 OOP 写法。
+本仓库使用 [Slidev](https://sli.dev/) 维护多个课程幻灯片。每个课件都是一个独立的 deck，放在 `decks/<slug>/` 下，并通过统一的首页构建和发布。
 
-## 课程内容
+## 当前课件
 
-- Git 本地历史、分支、远程仓库和 GitHub 工作流
-- 桌面端 C 工程的预处理、编译、汇编、链接流程
-- 头文件搜索、链接错误、静态库和构建产物
-- 从桌面端 C 程序迁移到裸机 ARM 固件
-- startup code、linker script、ELF、BIN、HEX 的基本关系
-- EIDE 项目配置和手写编译命令的对应关系
-- STM32CubeMX 生成工程、HAL/CMSIS 目录结构和 `USER CODE` 区域
-- 嵌入式 C 中的 `struct + ops + base` 风格封装
+- `foundation-of-embedded-c-development`：嵌入式 C 开发基础，覆盖 Git、C 工程构建、嵌入式工具链、EIDE、外设寄存器、CubeMX 生成项目和 C 语言 OOP 写法。
 
 ## 仓库结构
 
 ```text
 .
-├── slides.md                  # Slidev 主课件
-├── content.md                 # 课程内容设计和讲课备注
-├── memo.md                    # 上课准备备忘
-├── package.json               # Slidev 脚本和依赖
-├── pnpm-lock.yaml             # 依赖锁定文件
+├── decks/
+│   └── foundation-of-embedded-c-development/
+│       ├── deck.json          # deck 排序、路由和可见性
+│       └── slides.md          # Slidev 课件入口
+├── schemas/
+│   └── deck.schema.json       # deck.json 校验说明
+├── scripts/                   # 多 deck 开发、构建和导出脚本
+├── site/                      # 课件索引页模板和样式
+├── package.json               # 项目脚本和依赖
+├── pnpm-lock.yaml             # 依赖锁定
 └── .github/workflows/
     └── deploy-pages.yml       # GitHub Pages 自动部署
 ```
@@ -31,7 +29,7 @@ RoboMaster Summer Camp 2026 第一讲课件：嵌入式 C 开发基础。
 ## 环境要求
 
 - Node.js 22
-- pnpm 11.6.0
+- pnpm 11.8.0
 
 如果本机已启用 Corepack，可以直接使用仓库声明的 pnpm 版本：
 
@@ -42,27 +40,27 @@ pnpm install
 
 ## 本地开发
 
-安装依赖后启动 Slidev：
+安装依赖后启动完整课件站点：
 
 ```bash
 pnpm run dev
 ```
 
-默认会打开本地预览页面。也可以手动访问：
+访问课件索引：
 
 ```text
 http://localhost:3030
 ```
 
-需要在局域网内分享预览时使用：
+只开发某一个 deck 时，可以传入 deck slug：
 
 ```bash
-pnpm run serve
+pnpm run dev foundation-of-embedded-c-development
 ```
 
 ## 构建
 
-生成静态站点：
+构建首页、404 页面和所有 `listed` deck：
 
 ```bash
 pnpm run build
@@ -70,16 +68,18 @@ pnpm run build
 
 构建产物位于 `dist/`。
 
-GitHub Pages 部署使用专门的脚本，它会根据仓库名设置正确的 base path：
+预览构建产物：
 
 ```bash
-pnpm run build:pages
+pnpm run preview
 ```
 
 ## 导出 PDF
 
+导出指定 deck：
+
 ```bash
-pnpm run export
+pnpm run export foundation-of-embedded-c-development
 ```
 
 PDF 导出依赖 Playwright 的 Chromium。如果导出时报浏览器缺失，可以先安装浏览器：
@@ -98,9 +98,31 @@ pnpm exec playwright install chromium
 
 部署入口见 [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml)。
 
+## 新增课件
+
+1. 在 `decks/` 下创建小写 slug 目录，例如 `decks/stm32-peripheral-registers/`。
+2. 添加 `slides.md`，并在文件开头写 Slidev frontmatter。首页卡片会读取其中的 `title` 和 `info`。
+3. 添加 `deck.json`：
+
+```json
+{
+  "$schema": "../../schemas/deck.schema.json",
+  "order": 2
+}
+```
+
+4. 运行 `pnpm run dev` 检查首页卡片和 deck 路由。
+
+`deck.json` 支持：
+
+- `order`：首页排序，数字越小越靠前。
+- `route`：可选公开路由；不填时使用目录 slug。
+- `visibility`：可选值为 `listed`、`hidden`、`disabled`；不填时为 `listed`。
+
+slug 和 route 只能使用小写字母、数字和单连字符。
+
 ## 维护建议
 
-- 课件主体改 `slides.md`
-- 课程设计和讲解顺序先记录到 `content.md`
-- 临时上课准备事项放到 `memo.md`
-- 提交前至少运行一次 `pnpm run build`
+- deck 标题和简介写在 `slides.md` frontmatter 的 `title` 和 `info` 中。
+- deck 排序、路由和发布状态写在同目录的 `deck.json` 中。
+- 提交前至少运行 `pnpm run fmt:check` 和 `pnpm run build`。
