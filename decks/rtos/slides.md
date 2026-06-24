@@ -64,7 +64,7 @@ void HAL_Delay(uint32_t Delay);
 
 ---
 
-# `HAL_Delay` 核心逻辑
+# `HAL_Delay` 源代码
 
 ```c
 /**
@@ -79,29 +79,37 @@ __weak void HAL_Delay(uint32_t Delay) {
     uint32_t tickstart = HAL_GetTick();
     uint32_t wait = Delay;
 
+    /* Add a freq to guarantee minimum wait */
     if (wait < HAL_MAX_DELAY) {
         wait += uwTickFreq;
     }
 
-    while ((HAL_GetTick() - tickstart) < wait) {
-    }
+    while ((HAL_GetTick() - tickstart) < wait) { }
 }
 ```
+
+（来自 `stm32f4xx_hal.c`）
 
 ---
 
 # `HAL_IncTick` 和 `HAL_GetTick`
 
-STM32 HAL 的关键源码结构可以简化成：
+STM32 HAL 的关键源码结构（来自 `stm32f4xx_hal.c`）可以简化成：
 
 ```c
 __IO uint32_t uwTick;
 uint32_t uwTickFreq = 1U;  // HAL_TICK_FREQ_1KHZ
 
+/**
+  * @note In the default implementation, this variable is incremented each 1ms in SysTick ISR.
+  */
 __weak void HAL_IncTick(void) {
     uwTick += uwTickFreq;
 }
 
+/**
+  * @brief Provides a tick value in millisecond.
+  */
 __weak uint32_t HAL_GetTick(void) {
     return uwTick;
 }
@@ -115,7 +123,7 @@ __weak uint32_t HAL_GetTick(void) {
 
 常见 CubeMX / HAL 工程默认用 `SysTick` 产生 1 ms 中断。
 
-中断处理函数里会推进 HAL tick：
+中断处理函数里会推进 HAL tick（见 `stm32f4xx_it.c`）：
 
 ```c
 void SysTick_Handler(void) {
@@ -131,7 +139,6 @@ void SysTick_Handler(void) {
   * @note   This function is called  when TIM6 interrupt took place, inside HAL_TIM_IRQHandler().
   * It makes a direct call to HAL_IncTick() to increment a global variable "uwTick" used as application time base.
   * @param  htim : TIM handle
-  * @retval None
   */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
   if (htim->Instance == TIM6) {
@@ -141,8 +148,37 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 ```
 
 ---
+layout: two-cols
+---
 
-# 阻塞等待的问题
+::left::
+
+**SysTick**
+
+- Cortex-M 内核自带的 24-bit 递减计数器，不属于 STM32 外设。
+- 只有一个 SysTick。
+- 时钟通常来自内核时钟 `HCLK` 或 `HCLK/8`。
+- 功能简单：主要就是周期性中断。常见用途：
+  - HAL 计时、任务调度节拍、RTOS 计时。
+
+::right::
+
+**TIM**
+
+- STM32 外设定时器，属于芯片外设资源。
+- 位宽可能是 16-bit 或 32-bit，取决于具体 TIM。
+- 数量较多，如 `TIM1`、`TIM2`、`TIM3` 等。
+- 时钟来自 APB 总线定时器时钟。
+- 功能丰富：
+  - 定时中断、PWM 输出、输入捕获、输出比较等
+- 每个 TIM 有独立的预分频器、自动重装载寄存器、通道等。
+- 不同 TIM 功能可能不同：
+  - 如高级定时器支持死区时间、刹车输入等。
+  - 基本定时器只有定时中断功能。
+
+---
+
+# 阻塞等待的问题：不方便多任务协同
 
 如果程序只需要闪 LED，阻塞等待没问题。
 
@@ -164,7 +200,7 @@ while (1) {
 
 ---
 
-# `HAL_GetTick`：用时间差判断
+# 解决方案：用时间差判断
 
 ```c
 bool led_is_on = false;
@@ -193,9 +229,9 @@ while (1) {
 layout: section
 ---
 
-# 2 - 裸机程序如何变复杂
+# 2 - 复杂裸机程序
 
-从一个 LED 到一个机器人电控程序
+多任务协同
 
 ---
 
@@ -231,7 +267,7 @@ timeline
 
 ---
 
-# 裸机 tick 调度：不同模块不同频率
+# Tick 调度：不同模块不同频率
 
 ```c
 while (1) {
@@ -258,7 +294,7 @@ while (1) {
 
 ---
 
-# event driven：中断通知，主循环处理
+# 事件驱动（Event Driven）
 
 ```c
 volatile bool remote_rx_event = false;
@@ -278,11 +314,13 @@ while (1) {
 }
 ```
 
-中断只做通知，主循环处理具体逻辑。
+这个例子中，通知来自中断。中断只做通知，主循环处理具体逻辑。
+
+通知也可能来自其他任务。
 
 ---
 
-# event driven + tick 调度
+# 事件驱动 + Tick 调度
 
 ```c
 while (1) {
@@ -295,10 +333,9 @@ while (1) {
     }
 
     if (now - remote_last_seen > 100) {
+        // 超过 100 ms 没收到遥控器数据 -> 进入保护模式
         enter_safe_mode();
     }
-
-    do_other_tasks(now);
 }
 ```
 
@@ -392,6 +429,8 @@ void event_dispatch(void) {
 }
 ```
 
+`event_dispatch()` 遍历事件表，判断事件是否发生，执行相应的处理函数。
+
 ---
 
 # 一个简单的周期任务表
@@ -436,7 +475,7 @@ void scheduler_run() {
 }
 ```
 
-根据周期任务表，自动执行需要运行的任务。
+`scheduler_run()` 遍历周期任务表，判断是否到时间，执行相应的函数。
 
 ---
 layout: section
