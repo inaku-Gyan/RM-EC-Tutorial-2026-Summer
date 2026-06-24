@@ -3,8 +3,8 @@ theme: dracula
 title: "RTOS Introduction"
 info: |
   RoboMaster Summer Camp 2026 - RTOS introduction:
-  bare-metal loops, tick scheduling, event-driven design, CMSIS-RTOS v2,
-  and practical tradeoffs for STM32 robot control software.
+  HAL timing basics, bare-metal scheduling, event-driven design,
+  CMSIS-RTOS v2, and practical tradeoffs for STM32 robot control software.
 class: text-center
 drawings:
   persist: false
@@ -22,40 +22,180 @@ RM Summer Camp 2026
 
 # 课程大纲
 
-| 章节 | 内容                      |
-| ---- | ------------------------- |
-| 1    | 机器人电控需求            |
-| 2    | 裸机 `while(1)`           |
-| 3    | 裸机 tick 调度            |
-| 4    | 裸机 event driven         |
-| 5    | 裸机方案的边界            |
-| 6    | RTOS 基本概念             |
-| 7    | CMSIS-RTOS v2 和 FreeRTOS |
-| 8    | RTOS 核心功能             |
-| 9    | 示例架构总览              |
-| 10   | 代价和常见坑              |
+| 章节 | 内容                     |
+| ---- | ------------------------ |
+| 1    | LED 闪烁与 HAL 时间基础  |
+| 2    | 裸机程序如何变复杂       |
+| 3    | 裸机调度循环的封装与边界 |
+| 4    | RTOS 登场                |
+| 5    | 示例架构、代价和取舍     |
 
 ---
 layout: section
 ---
 
-# 1 - 需求情景
-
-一个机器人电控程序要同时做什么
+# 1 - HAL 时间基础
 
 ---
 
-# RTOS 是为了解决什么问题
+# `HAL_Delay`：阻塞等待
 
-RTOS 不是让 MCU 变成多核。
+```c
+while (1) {
+    led_off();
+    HAL_Delay(400);
 
-它的核心价值是：
-
-```text
-让多个有不同节奏和优先级的任务更容易组织。
+    led_on();
+    HAL_Delay(100);
+}
 ```
 
-这节课先从裸机方案出发，再看 RTOS 多提供了什么。
+- 灭灯 → 等 400 ms → 亮灯 → 等 100 ms
+
+`HAL_Delay` 阻塞当前执行流，参数单位为毫秒：
+
+```c
+/**
+  * @brief This function provides minimum delay (in milliseconds) based on variable incremented.
+  * @param Delay specifies the delay time length, in milliseconds.
+  */
+void HAL_Delay(uint32_t Delay);
+```
+
+---
+
+# `HAL_Delay` 核心逻辑
+
+```c
+/**
+  * @brief This function provides minimum delay (in milliseconds) based on variable incremented.
+  * @note In the default implementation, SysTick timer is the source of time base.
+  *       It is used to generate interrupts at regular time intervals where uwTick is incremented.
+  * @note This function is declared as __weak to be overwritten in case of other implementations in user file.
+  * @param Delay specifies the delay time length, in milliseconds.
+  * @retval None
+  */
+__weak void HAL_Delay(uint32_t Delay) {
+    uint32_t tickstart = HAL_GetTick();
+    uint32_t wait = Delay;
+
+    if (wait < HAL_MAX_DELAY) {
+        wait += uwTickFreq;
+    }
+
+    while ((HAL_GetTick() - tickstart) < wait) {
+    }
+}
+```
+
+---
+
+# `HAL_IncTick` 和 `HAL_GetTick`
+
+STM32 HAL 的关键源码结构可以简化成：
+
+```c
+__IO uint32_t uwTick;
+uint32_t uwTickFreq = 1U;  // HAL_TICK_FREQ_1KHZ
+
+__weak void HAL_IncTick(void) {
+    uwTick += uwTickFreq;
+}
+
+__weak uint32_t HAL_GetTick(void) {
+    return uwTick;
+}
+```
+
+`HAL_GetTick()` 本质上就是读 HAL 内部维护的 tick 计数。
+
+---
+
+# HAL tick
+
+常见 CubeMX / HAL 工程默认用 `SysTick` 产生 1 ms 中断。
+
+中断处理函数里会推进 HAL tick：
+
+```c
+void SysTick_Handler(void) {
+    HAL_IncTick();
+}
+```
+
+也可以配置成其他定时器作为 HAL timebase。以 TIM6 为例：
+
+```c
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM6 interrupt took place, inside HAL_TIM_IRQHandler().
+  * It makes a direct call to HAL_IncTick() to increment a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+  if (htim->Instance == TIM6) {
+    HAL_IncTick();
+  }
+}
+```
+
+---
+
+# 阻塞等待的问题
+
+如果程序只需要闪 LED，阻塞等待没问题。
+
+但如果还要同时处理其他事情：
+
+```c
+while (1) {
+    led_off();
+    HAL_Delay(400);
+
+    led_on();
+    HAL_Delay(100);
+
+    do_some_other_task();  // too late
+}
+```
+
+`do_some_other_task()` 每 500 ms 才有机会执行一次。
+
+---
+
+# `HAL_GetTick`：用时间差判断
+
+```c
+bool led_is_on = false;
+uint32_t last_change = HAL_GetTick();
+
+while (1) {
+    uint32_t now = HAL_GetTick();
+
+    if (!led_is_on && now - last_change >= 400) {
+        led_on();
+        led_is_on = true;
+        last_change = now;
+    }
+
+    if (led_is_on && now - last_change >= 100) {
+        led_off();
+        led_is_on = false;
+        last_change = now;
+    }
+
+    do_some_other_task();
+}
+```
+
+---
+layout: section
+---
+
+# 2 - 裸机程序如何变复杂
+
+从一个 LED 到一个机器人电控程序
 
 ---
 
@@ -90,71 +230,8 @@ timeline
 但 MCU 大部分时候只有一个 CPU 核心。
 
 ---
-layout: section
----
 
-# 2 - 裸机 `while(1)`
-
-最直接的程序结构
-
----
-
-# 最直接的写法
-
-```c
-while (1) {
-    remote_update();
-    chassis_control();
-    motor_control();
-    ui_update();
-    debug_print();
-}
-```
-
-这是很多嵌入式程序的起点。
-
-每一轮循环按顺序调用所有模块。
-
----
-
-# `while(1)` 的优点
-
-- 结构简单
-- 容易单步调试
-- 没有额外调度成本
-- 适合功能很少、节奏接近的小程序
-
-简单系统里，裸机主循环完全可以是正确选择。
-
----
-
-# 问题：所有模块挤在同一个循环里
-
-```mermaid
-flowchart LR
-  A[remote_update] --> B[chassis_control]
-  B --> C[motor_control]
-  C --> D[ui_update]
-  D --> E[debug_print]
-  E --> A
-```
-
-- 每个函数都会影响整轮循环时间
-- 慢操作会拖慢控制逻辑
-- 不同模块的执行频率不好表达
-- 功能越多，主循环越难维护
-
----
-layout: section
----
-
-# 3 - 裸机 Tick 调度
-
-把主循环变成调度循环
-
----
-
-# 把 `while(1)` 变成调度循环
+# 裸机 tick 调度：不同模块不同频率
 
 ```c
 while (1) {
@@ -181,57 +258,7 @@ while (1) {
 
 ---
 
-# 周期任务：不同模块不同频率
-
-| 模块                | 周期   | 原因                 |
-| ------------------- | ------ | -------------------- |
-| `motor_control()`   | 1 ms   | 输出控制要稳定       |
-| `chassis_control()` | 5 ms   | 控制决策频率较低     |
-| `safety_check()`    | 10 ms  | 检查遥控器、通信超时 |
-| `ui_update()`       | 100 ms | 显示慢，不应频繁刷新 |
-
-高频控制和低频显示不必每轮都执行。
-
----
-
-# tick 调度能解决什么
-
-- 表达不同模块的执行周期
-- 避免低频任务浪费主循环时间
-- 让主循环有明确的调度职责
-- 在不引入 RTOS 的情况下提升结构清晰度
-
-裸机不是低级写法。
-
-合理设计的 tick 调度可以支撑不少项目。
-
----
-layout: section
----
-
-# 4 - 裸机 Event Driven
-
-事件来了再处理
-
----
-
-# 事件不是每一轮都发生
-
-周期任务适合用 tick。
-
-但通信接收更像事件：
-
-```text
-没有收到数据：不需要解析
-收到一帧数据：尽快处理
-长时间没收到：进入保护
-```
-
-遥控器、裁判系统、上位机通信都常见这种模式。
-
----
-
-# 中断通知，主循环处理
+# event driven：中断通知，主循环处理
 
 ```c
 volatile bool remote_rx_event = false;
@@ -247,7 +274,7 @@ while (1) {
         remote_last_seen = HAL_GetTick();
     }
 
-    run_periodic_tasks();
+    do_other_tasks();
 }
 ```
 
@@ -271,15 +298,23 @@ while (1) {
         enter_safe_mode();
     }
 
-    run_periodic_tasks(now);
+    do_other_tasks(now);
 }
 ```
 
 事件更新时间，周期任务检查超时。
 
 ---
+layout: section
+---
 
-# 裸机已经可以写得很工程化
+# 3 - 裸机调度循环封装
+
+封装、复用，以及它的边界
+
+---
+
+# 整体架构
 
 ```mermaid
 flowchart TB
@@ -296,74 +331,120 @@ flowchart TB
 - 主循环仍然是唯一执行上下文
 
 ---
-layout: section
----
 
-# 5 - 裸机方案的边界
+# 把调度逻辑封装起来
 
-复杂度开始转移到主循环
+当周期任务越来越多，主循环可以继续抽象：
 
----
-
-# 裸机方案还能继续扩展吗
-
-假设继续增加需求：
-
-- 裁判系统和遥控器都要解析数据帧
-- UI 刷新很慢，但不能影响控制
-- 日志打印有时会等待串口
-- 多个模块都要读写机器人状态
-- 某些模块希望“等到消息再继续”
-
-裸机仍然能写，但主循环会越来越像手写调度器。
-
----
-
-# 复杂度开始转移到主循环
-
-```text
-if flag A:
-  handle A
-
-if time for task B:
-  run B
-
-if resource C available:
-  use C
-
-if timeout D:
-  protect
+```c
+while (1) {
+    event_dispatch();
+    scheduler_run();
+}
 ```
 
-- flag 越来越多
-- 代码顺序隐含优先级
-- 等待逻辑被拆成很多判断
-- 共享数据保护依赖人为约定
+这样 `while(1)` 不再直接写所有模块。
+
+它只负责分发事件和运行调度器。
 
 ---
 
-# 我们真正缺少什么
+# 一个简单的事件表
 
-当系统变复杂时，我们希望直接表达：
+```c
+typedef void (*EventFn)(void);
 
-| 需要表达的事情   | RTOS 提供的机制   |
-| ---------------- | ----------------- |
-| 不同职责分开运行 | task / thread     |
-| 重要任务先响应   | priority          |
-| 没事做时等待     | blocking wait     |
-| 任务之间传数据   | queue             |
-| 只通知事件发生   | flags / semaphore |
-| 保护共享资源     | mutex             |
+typedef struct {
+    volatile bool *flag;
+    EventFn run;
+} EventJob;
 
-RTOS 的价值从这里开始出现。
+volatile bool remote_rx_event = false;
+volatile bool referee_rx_event = false;
+volatile bool button_event = false;
+
+EventJob events[] = {
+//  { flag,              event_handler     },
+    { &remote_rx_event,  remote_handle_rx  },
+    { &referee_rx_event, referee_handle_rx },
+    { &button_event,     button_handle     },
+};
+```
+
+事件表描述“哪个事件发生后，调用哪个处理函数”。
+
+---
+
+# `event_dispatch()`
+
+某个事件发生了 → 执行某个函数
+
+```c
+void event_dispatch(void) {
+    for (size_t i = 0; i < ARRAY_SIZE(events); i++) {
+        EventJob *event = &events[i];
+
+        if (*event->flag) {
+            *event->flag = false;
+            event->run();
+        }
+    }
+}
+```
+
+---
+
+# 一个简单的周期任务表
+
+```c
+typedef void (*JobFn)(void);
+
+typedef struct {
+    uint32_t period_ms;
+    uint32_t last_run;
+    JobFn run;
+} PeriodicJob;
+
+PeriodicJob jobs[] = {
+//  { period_ms, last_run, job_function     },
+    { 1,         0,        motor_control    },
+    { 5,         0,        chassis_control  },
+    { 10,        0,        safety_check     },
+    { 100,       0,        ui_update        },
+};
+```
+
+周期、上次运行时间、执行函数被放进同一张表。
+
+---
+
+# `scheduler_run()`
+
+到时间了 → 执行某个函数
+
+```c
+void scheduler_run() {
+    uint32_t now = HAL_GetTick();
+    for (size_t i = 0; i < ARRAY_SIZE(jobs); i++) {
+        PeriodicJob *job = &jobs[i];
+
+        if (now - job->last_run >= job->period_ms) {
+            job->last_run = now;
+            job->run();
+        }
+    }
+}
+```
+
+根据周期任务表，自动执行需要运行的任务。
 
 ---
 layout: section
 ---
 
-# 6 - RTOS 登场
+# 4 - RTOS
 
-把职责拆成任务
+Real-Time Operating System
 
 ---
 
@@ -418,14 +499,6 @@ sequenceDiagram
 - 高优先级 task 可以更快响应
 
 ---
-layout: section
----
-
-# 7 - CMSIS-RTOS v2 和 FreeRTOS
-
-概念分层和术语对照
-
----
 
 # CMSIS-RTOS v2 是什么
 
@@ -475,14 +548,6 @@ flowchart TB
 | 线程标志 | `osThreadFlags`  | task notification / event-like usage |
 
 学概念时要看机制，不只看函数名。
-
----
-layout: section
----
-
-# 8 - RTOS 核心功能
-
-只讲实现示例需求所需的能力
 
 ---
 
@@ -619,6 +684,14 @@ void log_printf(const char *msg) {
 mutex 只保护确实共享且可能冲突的资源。
 
 ---
+layout: section
+---
+
+# 5 - 架构与取舍
+
+从示例需求回到系统设计
+
+---
 
 # 把示例需求组合起来
 
@@ -632,14 +705,6 @@ mutex 只保护确实共享且可能冲突的资源。
 | 多 task 共享串口     | `osMutex`                |
 
 这不是 API 清单，而是一组架构工具。
-
----
-layout: section
----
-
-# 9 - 示例架构总览
-
-从需求回到系统结构
 
 ---
 
@@ -677,14 +742,6 @@ flowchart LR
 高优先级任务要短。
 
 低优先级任务不能拿着共享资源不放。
-
----
-layout: section
----
-
-# 10 - 代价和常见坑
-
-RTOS 不是免费午餐
 
 ---
 
