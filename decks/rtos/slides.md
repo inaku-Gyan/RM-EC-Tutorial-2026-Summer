@@ -534,32 +534,100 @@ CMSIS-RTOS v2 是 ARM 提供的一层 RTOS API。
 
 ---
 
-# 常见的 RTOS 内核
+每种 RTOS 内核都有自己的 API，但 CMSIS-RTOS v2 提供了统一的接口。
 
-| 内核            | 许可证     | 说明 |
-| --------------- | ---------- | ---- |
-| FreeRTOS        | MIT        | 小型 MCU 常用，生态成熟 |
-| Zephyr          | Apache-2.0 | 面向互联设备，驱动和协议栈丰富 |
-| RT-Thread       | Apache-2.0 | 国产开源 RTOS，组件生态丰富 |
-| Keil RTX5       | Apache-2.0 | Arm 提供，原生 CMSIS-RTOS2 接口 |
-| Eclipse ThreadX | MIT        | 原 ThreadX / Azure RTOS，现由 Eclipse 维护 |
-| embOS           | 商业授权   | SEGGER 商业 RTOS，重视确定性和技术支持 |
+比如 FreeRTOS 的 CMSIS-RTOS2 适配层：
+
+```c
+osStatus_t osDelay (uint32_t ticks) {
+  osStatus_t stat;
+
+  if (IS_IRQ()) {
+    stat = osErrorISR;
+  }
+  else {
+    stat = osOK;
+
+    if (ticks != 0U) {
+      vTaskDelay(ticks);  // FreeRTOS 提供的 API
+    }
+  }
+
+  return (stat);
+}
+```
 
 ---
 
-# 同一个概念的不同名字
+| 概念     | CMSIS-RTOS API v2                    | FreeRTOS                                             |
+| -------- | ------------------------------------ | ---------------------------------------------------- |
+| 任务     | `osThreadId_t`, `osThreadNew`        | `TaskHandle_t`, `xTaskCreate`, `xTaskCreateStatic`   |
+| 延时     | `osDelay`                            | `vTaskDelay`                                         |
+| 队列     | `osMessageQueuePut`                  | `xQueueSendToBack`                                   |
+| 信号量   | `osSemaphoreNew`                     | `xSemaphoreCreateBinary`, `xSemaphoreCreateCounting` |
+| 互斥锁   | `osMutexAcquire`, `osMutexRelease`   | `xSemaphoreTake`, `xSemaphoreGive`                   |
+| 事件标志 | `osEventFlagsNew`, `osEventFlagsSet` | `xEventGroupCreate`, `xEventGroupSetBits`            |
 
-| 概念     | CMSIS-RTOS v2    | FreeRTOS                             |
-| -------- | ---------------- | ------------------------------------ |
-| 任务     | thread           | task                                 |
-| 延时     | `osDelay`        | `vTaskDelay`                         |
-| 队列     | `osMessageQueue` | `xQueue`                             |
-| 信号量   | `osSemaphore`    | semaphore                            |
-| 互斥锁   | `osMutex`        | mutex                                |
-| 事件标志 | `osEventFlags`   | event group                          |
-| 线程标志 | `osThreadFlags`  | task notification / event-like usage |
+---
 
-学概念时要看机制，不只看函数名。
+# 常见的 RTOS 内核
+
+| 内核            | 许可证     | 说明                                       |
+| --------------- | ---------- | ------------------------------------------ |
+| FreeRTOS        | MIT        | 小型 MCU 常用，生态成熟                    |
+| Zephyr          | Apache-2.0 | 面向互联设备，驱动和协议栈丰富             |
+| RT-Thread       | Apache-2.0 | 国产开源 RTOS，组件生态丰富                |
+| Keil RTX5       | Apache-2.0 | Arm 提供，原生 CMSIS-RTOS2 接口            |
+| Eclipse ThreadX | MIT        | 原 ThreadX / Azure RTOS，现由 Eclipse 维护 |
+| embOS           | 商业授权   | SEGGER 商业 RTOS，重视确定性和技术支持     |
+
+---
+layout: image
+image: https://github.com/RT-Thread/rt-thread/blob/master/documentation/figures/architecture.png?raw=true
+backgroundSize: 63%
+---
+
+### RT-Thread
+
+---
+layout: two-cols-header
+---
+
+# FreeRTOS = Kernel + Libraries
+
+::left::
+
+## _Kernel_
+
+- Task management
+- Software timers
+- Queues
+- Message buffers
+- Stream buffers
+- Semaphores and mutexes
+- Event flags or groups
+- Co-routines
+
+::right::
+
+## _Libraries_
+
+#### FreeRTOS Plus
+
+- FreeRTOS-Plus-TCP
+- FreeRTOS-Plus-CLI
+- FreeRTOS-Plus-IO
+
+#### FreeRTOS Core
+
+- coreMQTT
+- coreJSON
+- coreHTTP
+- corePKCS #11
+
+#### FreeRTOS for AWS IoT
+
+#### FreeRTOS Lab libraries
 
 ---
 
@@ -638,13 +706,13 @@ sequenceDiagram
 
 # 任务状态
 
-| 状态                 | 含义 |
-| -------------------- | ---- |
-| `Running`            | 当前正在 CPU 上执行 |
-| `Ready`              | 已经可以运行，等待 scheduler 分配 CPU |
-| `Blocked / Waiting`  | 等待时间、队列、信号量、事件等条件 |
-| `Suspended`          | 被人为暂停，不参与调度 |
-| `Terminated`         | 任务结束或被删除 |
+| 状态                | 含义                                  |
+| ------------------- | ------------------------------------- |
+| `Running`           | 当前正在 CPU 上执行                   |
+| `Ready`             | 已经可以运行，等待 scheduler 分配 CPU |
+| `Blocked / Waiting` | 等待时间、队列、信号量、事件等条件    |
+| `Suspended`         | 被人为暂停，不参与调度                |
+| `Terminated`        | 任务结束或被删除                      |
 
 RTOS 调度器主要在 `Ready` 任务里选择一个进入 `Running`。
 
