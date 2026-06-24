@@ -486,8 +486,16 @@ layout: section
 Real-Time Operating System
 
 ---
+layout: two-cols
+---
 
 # RTOS 的基本想法
+
+RTOS 提供一个内核。
+
+内核负责调度任务，并提供任务间协作机制。
+
+::right::
 
 ```mermaid
 flowchart TB
@@ -497,13 +505,9 @@ flowchart TB
   Scheduler --> CPU[Cortex-M CPU]
 ```
 
-RTOS 提供一个内核。
-
-内核负责调度任务，并提供任务间协作机制。
-
 ---
 
-# 从函数列表到任务列表
+# 任务列表
 
 | Task          | 触发方式       | 优先级 |
 | ------------- | -------------- | ------ |
@@ -517,60 +521,137 @@ RTOS 提供一个内核。
 不同职责不再全部挤在一个 `while(1)` 里。
 
 ---
+layout: two-cols
+---
 
-# 任务不是并行魔法，而是调度
-
-```mermaid
-sequenceDiagram
-  participant M as MotorTask
-  participant R as RemoteTask
-  participant U as UITask
-  participant CPU as CPU
-  M->>CPU: run
-  R->>CPU: run after event
-  M->>CPU: run again
-  U->>CPU: run when low priority work fits
-```
+# 任务调度
 
 - task 是独立的执行上下文
 - scheduler 决定当前运行哪个 task
 - task 可以阻塞等待事件
 - 高优先级 task 可以更快响应
 
+::right::
+
+```mermaid
+sequenceDiagram
+  participant CPU as CPU / Scheduler
+  participant M as MotorTask
+  participant R as RemoteTask
+  participant U as UITask
+
+  CPU->>M: dispatch: 1 ms control tick
+  activate M
+  M-->>CPU: block until next period
+  deactivate M
+
+  Note over CPU,R: remote packet event
+  CPU->>R: dispatch: parse input
+  activate R
+  R-->>CPU: wait for next packet
+  deactivate R
+
+  CPU->>M: dispatch: next control tick
+  activate M
+  M-->>CPU: update motor output
+  deactivate M
+
+  CPU->>U: dispatch: low priority UI refresh
+  activate U
+  Note over CPU,R: another remote packet arrives
+  U-->>CPU: preempted
+  deactivate U
+
+  CPU->>R: dispatch: handle new input
+  activate R
+  R-->>CPU: event handled
+  deactivate R
+
+  CPU->>M: dispatch: next control tick
+  activate M
+  M-->>CPU: block again
+  deactivate M
+
+  CPU->>U: resume UI refresh
+  activate U
+  U-->>CPU: osDelay(100 ms)
+  deactivate U
+```
+
 ---
 
-# CMSIS-RTOS v2 是什么
+# 任务状态
+
+| 状态                 | 含义 |
+| -------------------- | ---- |
+| `Running`            | 当前正在 CPU 上执行 |
+| `Ready`              | 已经可以运行，等待 scheduler 分配 CPU |
+| `Blocked / Waiting`  | 等待时间、队列、信号量、事件等条件 |
+| `Suspended`          | 被人为暂停，不参与调度 |
+| `Terminated`         | 任务结束或被删除 |
+
+RTOS 调度器主要在 `Ready` 任务里选择一个进入 `Running`。
+
+---
+layout: two-cols
+---
+
+# 任务状态转换
+
+- `Blocked`：任务主动让出 CPU
+- 高优先级任务从 `Blocked` 回到 `Ready` 后，可能抢占低优先级任务
+- `osDelay()`、队列等待、信号量等待本质上都会让任务离开 `Running`
+
+::right::
+
+```mermaid
+stateDiagram-v2
+  [*] --> Ready
+  Ready --> Running: scheduler<br>selects
+  Running --> Ready: time slice /<br>higher priority task
+  Running --> Blocked: osDelay / wait event
+  Blocked --> Ready: timeout / event arrives
+```
+
+---
+layout: two-cols-header
+---
+
+# CMSIS-RTOS v2
+
+Arm 官方文档：https://arm-software.github.io/CMSIS_6/latest/RTOS2/index.html
+
+::left::
 
 CMSIS-RTOS v2 是 ARM 提供的一层 RTOS API。
 
-```text
-应用代码
-  |
-CMSIS-RTOS v2 API
-  |
-RTOS Kernel Adapter
-  |
-具体 RTOS Kernel
-```
-
 它让应用代码使用相对统一的接口描述任务、队列、互斥锁等概念。
+
+典型分层关系是：
+
+- 应用代码优先调用 CMSIS-RTOS2 通用 API
+- CMSIS-RTOS2 下面适配具体 RTOS kernel
+- kernel 仍然运行在 Cortex-M 处理器上
+- OS tick/timebase 由 SysTick 或定时器实现
+
+::right::
+
+<br>
+
+<img src="https://arm-software.github.io/CMSIS_6/latest/RTOS2/cmsis_rtos2_overview.png" class="mx-auto" />
 
 ---
 
-# 它和 FreeRTOS 是什么关系
+# 常见的 RTOS 内核
 
-```mermaid
-flowchart TB
-  App[Application Code] --> CMSIS[CMSIS-RTOS v2 API]
-  CMSIS --> Adapter[RTOS Adapter Layer]
-  Adapter --> FreeRTOS[FreeRTOS Kernel]
-  FreeRTOS --> HW[Cortex-M / STM32]
-```
-
-- FreeRTOS 是具体 RTOS 内核
-- CMSIS-RTOS v2 是统一 API 层
-- CubeMX 常见做法是启用 FreeRTOS，并选择 CMSIS-RTOS v2 接口
-- 本课示例使用 CMSIS-RTOS v2 术语
+| 内核            | 许可证     | 说明 |
+| --------------- | ---------- | ---- |
+| FreeRTOS        | MIT        | 小型 MCU 常用，生态成熟 |
+| Zephyr          | Apache-2.0 | 面向互联设备，驱动和协议栈丰富 |
+| RT-Thread       | Apache-2.0 | 国产开源 RTOS，组件生态丰富 |
+| Keil RTX5       | Apache-2.0 | Arm 提供，原生 CMSIS-RTOS2 接口 |
+| Eclipse ThreadX | MIT        | 原 ThreadX / Azure RTOS，现由 Eclipse 维护 |
+| embOS           | 商业授权   | SEGGER 商业 RTOS，重视确定性和技术支持 |
 
 ---
 
