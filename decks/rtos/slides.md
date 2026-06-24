@@ -491,7 +491,7 @@ layout: two-cols
 
 # RTOS 的基本想法
 
-RTOS 提供一个内核。
+RTOS 提供一个调度器内核。
 
 内核负责调度任务，并提供任务间协作机制。
 
@@ -504,6 +504,62 @@ flowchart TB
   Kernel --> Sync[Queue / Semaphore / Mutex]
   Scheduler --> CPU[Cortex-M CPU]
 ```
+
+---
+layout: two-cols-header
+---
+
+# CMSIS-RTOS v2
+
+Arm 官方文档：https://arm-software.github.io/CMSIS_6/latest/RTOS2/index.html
+
+::left::
+
+CMSIS-RTOS v2 是 ARM 提供的一层 RTOS API。
+
+它让应用代码使用相对统一的接口描述任务、队列、互斥锁等概念。
+
+典型分层关系是：
+
+- 应用代码优先调用 CMSIS-RTOS2 通用 API
+- CMSIS-RTOS2 下面适配具体 RTOS kernel
+- kernel 仍然运行在 Cortex-M 处理器上
+- OS tick/timebase 由 SysTick 或定时器实现
+
+::right::
+
+<br>
+
+<img src="https://arm-software.github.io/CMSIS_6/latest/RTOS2/cmsis_rtos2_overview.png" class="mx-auto" />
+
+---
+
+# 常见的 RTOS 内核
+
+| 内核            | 许可证     | 说明 |
+| --------------- | ---------- | ---- |
+| FreeRTOS        | MIT        | 小型 MCU 常用，生态成熟 |
+| Zephyr          | Apache-2.0 | 面向互联设备，驱动和协议栈丰富 |
+| RT-Thread       | Apache-2.0 | 国产开源 RTOS，组件生态丰富 |
+| Keil RTX5       | Apache-2.0 | Arm 提供，原生 CMSIS-RTOS2 接口 |
+| Eclipse ThreadX | MIT        | 原 ThreadX / Azure RTOS，现由 Eclipse 维护 |
+| embOS           | 商业授权   | SEGGER 商业 RTOS，重视确定性和技术支持 |
+
+---
+
+# 同一个概念的不同名字
+
+| 概念     | CMSIS-RTOS v2    | FreeRTOS                             |
+| -------- | ---------------- | ------------------------------------ |
+| 任务     | thread           | task                                 |
+| 延时     | `osDelay`        | `vTaskDelay`                         |
+| 队列     | `osMessageQueue` | `xQueue`                             |
+| 信号量   | `osSemaphore`    | semaphore                            |
+| 互斥锁   | `osMutex`        | mutex                                |
+| 事件标志 | `osEventFlags`   | event group                          |
+| 线程标志 | `osThreadFlags`  | task notification / event-like usage |
+
+学概念时要看机制，不只看函数名。
 
 ---
 
@@ -612,62 +668,6 @@ stateDiagram-v2
   Running --> Blocked: osDelay / wait event
   Blocked --> Ready: timeout / event arrives
 ```
-
----
-layout: two-cols-header
----
-
-# CMSIS-RTOS v2
-
-Arm 官方文档：https://arm-software.github.io/CMSIS_6/latest/RTOS2/index.html
-
-::left::
-
-CMSIS-RTOS v2 是 ARM 提供的一层 RTOS API。
-
-它让应用代码使用相对统一的接口描述任务、队列、互斥锁等概念。
-
-典型分层关系是：
-
-- 应用代码优先调用 CMSIS-RTOS2 通用 API
-- CMSIS-RTOS2 下面适配具体 RTOS kernel
-- kernel 仍然运行在 Cortex-M 处理器上
-- OS tick/timebase 由 SysTick 或定时器实现
-
-::right::
-
-<br>
-
-<img src="https://arm-software.github.io/CMSIS_6/latest/RTOS2/cmsis_rtos2_overview.png" class="mx-auto" />
-
----
-
-# 常见的 RTOS 内核
-
-| 内核            | 许可证     | 说明 |
-| --------------- | ---------- | ---- |
-| FreeRTOS        | MIT        | 小型 MCU 常用，生态成熟 |
-| Zephyr          | Apache-2.0 | 面向互联设备，驱动和协议栈丰富 |
-| RT-Thread       | Apache-2.0 | 国产开源 RTOS，组件生态丰富 |
-| Keil RTX5       | Apache-2.0 | Arm 提供，原生 CMSIS-RTOS2 接口 |
-| Eclipse ThreadX | MIT        | 原 ThreadX / Azure RTOS，现由 Eclipse 维护 |
-| embOS           | 商业授权   | SEGGER 商业 RTOS，重视确定性和技术支持 |
-
----
-
-# 同一个概念的不同名字
-
-| 概念     | CMSIS-RTOS v2    | FreeRTOS                             |
-| -------- | ---------------- | ------------------------------------ |
-| 任务     | thread           | task                                 |
-| 延时     | `osDelay`        | `vTaskDelay`                         |
-| 队列     | `osMessageQueue` | `xQueue`                             |
-| 信号量   | `osSemaphore`    | semaphore                            |
-| 互斥锁   | `osMutex`        | mutex                                |
-| 事件标志 | `osEventFlags`   | event group                          |
-| 线程标志 | `osThreadFlags`  | task notification / event-like usage |
-
-学概念时要看机制，不只看函数名。
 
 ---
 
