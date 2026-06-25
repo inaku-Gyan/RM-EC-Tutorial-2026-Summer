@@ -21,20 +21,19 @@ RM Summer Camp 2026
 
 # 课程大纲
 
-| 章节 | 内容 |
-| --- | --- |
-| 1 | Git 基础 |
-| 2 | 桌面端 C 工程构建 |
-| 3 | 从桌面端到嵌入式 |
-| 4 | EIDE |
-| 5 | 外设寄存器 |
-| 6 | CubeMX 生成项目 |
-| 7 | C 语言 OOP |
+| 章节 | 内容              |
+| ---- | ----------------- |
+| 1    | Git 基础          |
+| 2    | 桌面端 C 工程构建 |
+| 3    | 从桌面端到嵌入式  |
+| 4    | EIDE              |
+| 5    | 外设寄存器        |
+| 6    | CubeMX 生成项目   |
+| 7    | C 语言 OOP        |
 
 ---
 layout: section
 ---
-
 
 # 1 - Git 基础
 
@@ -90,9 +89,9 @@ gitGraph
 
 # Git 和 GitHub
 
-| 名称 | 作用 |
-| --- | --- |
-| Git | 本地版本管理工具 |
+| 名称   | 作用             |
+| ------ | ---------------- |
+| Git    | 本地版本管理工具 |
 | GitHub | 远程代码托管平台 |
 
 Git 是完全独立的工具，GitHub 是基于 Git 的在线服务。
@@ -286,12 +285,12 @@ Git Graph
 
 # 命令行和 Git Graph 的关系
 
-| 命令行 | Git Graph |
-| --- | --- |
-| `git log --oneline` | 提交列表 |
-| `git branch` | 分支视图 |
-| `git diff` | 文件变化 |
-| `git checkout` / `switch` | 切换位置 |
+| 命令行                    | Git Graph |
+| ------------------------- | --------- |
+| `git log --oneline`       | 提交列表  |
+| `git branch`              | 分支视图  |
+| `git diff`                | 文件变化  |
+| `git checkout` / `switch` | 切换位置  |
 
 ---
 
@@ -399,18 +398,15 @@ gitGraph
 
 merge 把另一条分支的修改合回**当前分支**。
 
-
 ```bash
 git switch main
 git merge feature/demo-counter
 ```
 
-
 拓展内容：
 
 - rebase
 - squash
-
 
 ---
 
@@ -579,12 +575,12 @@ HTTPS 更直观；SSH 更适合长期开发。
 
 # GitHub Repo 权限
 
-| 权限 | 含义 |
-| --- | --- |
-| Public | 任何人可见 |
-| Private | 只有授权用户可见 |
-| Collaborator | 被邀请的协作者 |
-| Branch Protection | 保护重要分支 |
+| 权限              | 含义             |
+| ----------------- | ---------------- |
+| Public            | 任何人可见       |
+| Private           | 只有授权用户可见 |
+| Collaborator      | 被邀请的协作者   |
+| Branch Protection | 保护重要分支     |
 
 ---
 
@@ -603,13 +599,13 @@ HTTPS 更直观；SSH 更适合长期开发。
 
 # 课后拓展
 
-| 功能 | 用途 |
-| --- | --- |
-| `git tag` | 给版本打标签 |
-| `git cherry-pick` | 选择性地应用某个提交 |
-| `git submodule` | 引入另一个 Git 仓库 |
-| `git worktree` | 一个仓库多个工作目录 |
-| Git hooks | 在 commit/push 前后执行脚本 |
+| 功能              | 用途                        |
+| ----------------- | --------------------------- |
+| `git tag`         | 给版本打标签                |
+| `git cherry-pick` | 选择性地应用某个提交        |
+| `git submodule`   | 引入另一个 Git 仓库         |
+| `git worktree`    | 一个仓库多个工作目录        |
+| Git hooks         | 在 commit/push 前后执行脚本 |
 
 一个有趣的网站：https://learngitbranching.js.org/
 
@@ -627,12 +623,12 @@ Example Project 1
 
 标准不是编译器。
 
-| 层次 | 作用 |
-| --- | --- |
-| ISO C / C++ 标准 | 定义语言规则和标准库接口 |
-| 编译器实现 | 把源代码翻译成目标平台代码 |
-| 标准库实现 | 提供 `printf`、`malloc`、`std::vector` 等函数和类型 |
-| 平台与 ABI | 规定函数调用、对象格式、链接方式 |
+| 层次             | 作用                                                |
+| ---------------- | --------------------------------------------------- |
+| ISO C / C++ 标准 | 定义语言规则和标准库接口                            |
+| 编译器实现       | 把源代码翻译成目标平台代码                          |
+| 标准库实现       | 提供 `printf`、`malloc`、`std::vector` 等函数和类型 |
+| 平台与 ABI       | 规定函数调用、对象格式、链接方式                    |
 
 ---
 
@@ -674,7 +670,6 @@ flowchart LR
 - 可执行文件一定是 ELF / PE / Mach-O
 - 裸机环境一定有 `printf`
 - 同一段代码在所有目标平台生成相同机器码
-
 
 ---
 
@@ -1205,7 +1200,6 @@ flowchart LR
   I --> J["main()"]
 ```
 
-
 ---
 
 # ELF 无法直接运行
@@ -1394,10 +1388,10 @@ _sidata = LOADADDR(.data);
 
 # Startup 与 Linker Script 分工
 
-| 文件 | 负责内容 |
-| --- | --- |
-| `startup.c` | 提供 vector table、定义 `Reset_Handler`、初始化 `.data`、清零 `.bss`、调用 `main()` |
-| linker script | 声明 Flash/RAM 地址、安排 section 位置、导出启动所需符号 |
+| 文件          | 负责内容                                                                            |
+| ------------- | ----------------------------------------------------------------------------------- |
+| `startup.c`   | 提供 vector table、定义 `Reset_Handler`、初始化 `.data`、清零 `.bss`、调用 `main()` |
+| linker script | 声明 Flash/RAM 地址、安排 section 位置、导出启动所需符号                            |
 
 核心关系：
 
@@ -1941,14 +1935,14 @@ flowchart TB
 
 # MCU 生态的几个层级
 
-| 层级 | 示例 |
-| --- | --- |
-| 1. 指令集架构 | Arm / RISC-V / Xtensa / AVR |
+| 层级          | 示例                            |
+| ------------- | ------------------------------- |
+| 1. 指令集架构 | Arm / RISC-V / Xtensa / AVR     |
 | 2. 处理器内核 | Cortex-M4 / Cortex-M7 / RV32IMC |
-| 3. 芯片系列 | STM32F1 / STM32F4 / STM32H7 |
-| 4. 具体型号 | STM32F407IGH6 |
-| 5. 开发板 | Nucleo / Discovery |
-| 6. 软件支持 | CMSIS / HAL / LL / RTOS |
+| 3. 芯片系列   | STM32F1 / STM32F4 / STM32H7     |
+| 4. 具体型号   | STM32F407IGH6                   |
+| 5. 开发板     | Nucleo / Discovery              |
+| 6. 软件支持   | CMSIS / HAL / LL / RTOS         |
 
 ```text
 架构 -> 内核 -> 系列 -> 型号 -> 开发板 -> 软件支持
@@ -1960,13 +1954,13 @@ flowchart TB
 
 # 架构与内核示例
 
-| 层级 | 例子 | 说明 |
-| --- | --- | --- |
-| 指令集架构 | Armv7-M / Armv8-M | CPU 能执行什么指令、异常模型如何定义 |
-| 指令集架构 | RISC-V RV32 / RV64 | 开放指令集，常见于新 MCU 和 SoC |
-| 处理器内核 | Cortex-M3 / M4 / M7 | 面向 MCU 的 Arm 内核 |
-| 处理器内核 | Cortex-A53 / A72 | 面向应用处理器，通常运行 Linux |
-| 处理器内核 | Xtensa LX6 / LX7 | ESP32 系列常见内核 |
+| 层级       | 例子                | 说明                                 |
+| ---------- | ------------------- | ------------------------------------ |
+| 指令集架构 | Armv7-M / Armv8-M   | CPU 能执行什么指令、异常模型如何定义 |
+| 指令集架构 | RISC-V RV32 / RV64  | 开放指令集，常见于新 MCU 和 SoC      |
+| 处理器内核 | Cortex-M3 / M4 / M7 | 面向 MCU 的 Arm 内核                 |
+| 处理器内核 | Cortex-A53 / A72    | 面向应用处理器，通常运行 Linux       |
+| 处理器内核 | Xtensa LX6 / LX7    | ESP32 系列常见内核                   |
 
 `Cortex-*` 是 Arm 的处理器内核产品线，不是某个具体芯片。
 
@@ -1974,13 +1968,13 @@ flowchart TB
 
 # Cortex-M 与 Cortex-A
 
-| 项目 | Cortex-M | Cortex-A |
-| --- | --- | --- |
-| 典型用途 | MCU、实时控制、低功耗设备 | 应用处理器、手机、Linux 板卡 |
-| 常见系统 | 裸机、RTOS | Linux、Android |
+| 项目       | Cortex-M                            | Cortex-A                      |
+| ---------- | ----------------------------------- | ----------------------------- |
+| 典型用途   | MCU、实时控制、低功耗设备           | 应用处理器、手机、Linux 板卡  |
+| 常见系统   | 裸机、RTOS                          | Linux、Android                |
 | 启动关注点 | vector table、`Reset_Handler`、中断 | bootloader、MMU、操作系统启动 |
-| 例子 | Cortex-M0 / M3 / M4 / M7 / M33 | Cortex-A7 / A53 / A72 |
-| 课程相关 | STM32F407 使用 Cortex-M4 | 不作为本课主线 |
+| 例子       | Cortex-M0 / M3 / M4 / M7 / M33      | Cortex-A7 / A53 / A72         |
+| 课程相关   | STM32F407 使用 Cortex-M4            | 不作为本课主线                |
 
 同属 Arm 生态，但开发模型差别很大。
 
@@ -1988,14 +1982,14 @@ flowchart TB
 
 # STM32 系列示例
 
-| 系列 | 常见定位 | 例子 |
-| --- | --- | --- |
-| STM32F1 | 经典入门、资源适中 | STM32F103 |
-| STM32F4 | 性能更高，常见于控制和机器人 | STM32F407 / STM32F429 |
-| STM32H7 | 高性能 MCU，频率和外设更强 | STM32H743 / STM32H750 |
-| STM32G0 / G4 | 新一代通用或电机控制方向 | STM32G030 / STM32G431 |
-| STM32L4 / U5 | 低功耗方向 | STM32L432 / STM32U575 |
-| STM32WB / WL | 无线连接方向 | STM32WB55 / STM32WL55 |
+| 系列         | 常见定位                     | 例子                  |
+| ------------ | ---------------------------- | --------------------- |
+| STM32F1      | 经典入门、资源适中           | STM32F103             |
+| STM32F4      | 性能更高，常见于控制和机器人 | STM32F407 / STM32F429 |
+| STM32H7      | 高性能 MCU，频率和外设更强   | STM32H743 / STM32H750 |
+| STM32G0 / G4 | 新一代通用或电机控制方向     | STM32G030 / STM32G431 |
+| STM32L4 / U5 | 低功耗方向                   | STM32L432 / STM32U575 |
+| STM32WB / WL | 无线连接方向                 | STM32WB55 / STM32WL55 |
 
 同是 STM32，不同系列的内核、外设、时钟树和内存布局都可能不同。
 
@@ -2003,15 +1997,15 @@ flowchart TB
 
 # 其他常见 MCU
 
-| 厂商 / 生态 | 例子 | 特点 |
-| --- | --- | --- |
-| ST | STM32F1 / F4 / H7 | CubeMX、HAL / LL 生态完整 |
-| Espressif | ESP32 / ESP32-S3 | Wi-Fi / Bluetooth 常见，Xtensa 或 RISC-V |
-| Nordic | nRF52 / nRF53 | 低功耗 Bluetooth 常见 |
-| NXP | LPC / i.MX RT | Cortex-M MCU 和高性能 crossover MCU |
-| Microchip | AVR / PIC / SAM | 8 bit 到 Cortex-M 产品线都有 |
-| TI | MSPM0 / C2000 | 低功耗或电机控制场景常见 |
-| GigaDevice | GD32F1 / GD32F4 | 国产常见 Cortex-M MCU |
+| 厂商 / 生态 | 例子              | 特点                                     |
+| ----------- | ----------------- | ---------------------------------------- |
+| ST          | STM32F1 / F4 / H7 | CubeMX、HAL / LL 生态完整                |
+| Espressif   | ESP32 / ESP32-S3  | Wi-Fi / Bluetooth 常见，Xtensa 或 RISC-V |
+| Nordic      | nRF52 / nRF53     | 低功耗 Bluetooth 常见                    |
+| NXP         | LPC / i.MX RT     | Cortex-M MCU 和高性能 crossover MCU      |
+| Microchip   | AVR / PIC / SAM   | 8 bit 到 Cortex-M 产品线都有             |
+| TI          | MSPM0 / C2000     | 低功耗或电机控制场景常见                 |
+| GigaDevice  | GD32F1 / GD32F4   | 国产常见 Cortex-M MCU                    |
 
 工具链、SDK 和启动文件会随厂商生态变化，但“内核、内存、外设、启动、链接”的问题仍然存在。
 
@@ -2019,15 +2013,15 @@ flowchart TB
 
 # 课程目标芯片
 
-| 层级 | 本课对应 |
-| --- | --- |
-| 指令集 / 内核 | Arm Cortex-M4 |
-| MCU 系列 | STM32F4 |
-| 具体型号 | STM32F407IGH6 |
-| 开发板 | RoboMaster C 板 |
-| 代码生成工具 | STM32CubeMX |
-| 工具链 | EIDE + Arm GCC |
-| 软件库 | CMSIS + HAL / LL |
+| 层级          | 本课对应         |
+| ------------- | ---------------- |
+| 指令集 / 内核 | Arm Cortex-M4    |
+| MCU 系列      | STM32F4          |
+| 具体型号      | STM32F407IGH6    |
+| 开发板        | RoboMaster C 板  |
+| 代码生成工具  | STM32CubeMX      |
+| 工具链        | EIDE + Arm GCC   |
+| 软件库        | CMSIS + HAL / LL |
 
 后续遇到配置项时，先判断它属于哪一层。
 
@@ -2039,11 +2033,11 @@ flowchart TB
 
 按照课程开发板原理图配置：
 
-| 功能类型 | 网络名 | 对应 IO | Pin mode | Initial level |
-| --- | --- | --- | --- | --- |
-| LED | `LED_R` | `PH12` | `GPIO_Output` | Low |
-| LED | `LED_G` | `PH11` | `GPIO_Output` | Low |
-| LED | `LED_B` | `PH10` | `GPIO_Output` | Low |
+| 功能类型 | 网络名  | 对应 IO | Pin mode      | Initial level |
+| -------- | ------- | ------- | ------------- | ------------- |
+| LED      | `LED_R` | `PH12`  | `GPIO_Output` | Low           |
+| LED      | `LED_G` | `PH11`  | `GPIO_Output` | Low           |
+| LED      | `LED_B` | `PH10`  | `GPIO_Output` | Low           |
 
 CubeMX 里把 `PH12`、`PH11`、`PH10` 都设置为 `GPIO_Output`，并分别填写 user label。
 
@@ -2121,7 +2115,7 @@ proj-3/
 
 # `Drivers/CMSIS`
 
-*Cortex Microcontroller Software Interface Standard*
+_Cortex Microcontroller Software Interface Standard_
 
 CMSIS 提供：
 
@@ -2136,7 +2130,7 @@ CMSIS 提供：
 
 # `Drivers/STM32F4xx_HAL_Driver`
 
-*Hardware Abstraction Layer*
+_Hardware Abstraction Layer_
 
 HAL 提供：
 
@@ -2524,12 +2518,12 @@ static void DesktopLed_Toggle(LedBase *base) {
 
 # 几个相关操作
 
-| 操作 | 含义 | 示例 |
-| --- | --- | --- |
-| upcast | 具体对象转 base 指针 | `LedBase *p = &led->base;` |
-| downcast | base 指针转具体对象 | `container_of(p, DesktopLed, base)` |
-| type tag | 运行时区分对象类型 | `led->kind == LED_DESKTOP` |
-| magic value | 检查指针是否指向合法对象 | `led->magic == LED_MAGIC` |
+| 操作        | 含义                     | 示例                                |
+| ----------- | ------------------------ | ----------------------------------- |
+| upcast      | 具体对象转 base 指针     | `LedBase *p = &led->base;`          |
+| downcast    | base 指针转具体对象      | `container_of(p, DesktopLed, base)` |
+| type tag    | 运行时区分对象类型       | `led->kind == LED_DESKTOP`          |
+| magic value | 检查指针是否指向合法对象 | `led->magic == LED_MAGIC`           |
 
 这些技巧可以扩展阅读，本节只要求理解 `struct + ops + base`。
 
@@ -2601,24 +2595,24 @@ Embedded:
 
 # 7 个章节回顾
 
-| 章节 | 核心问题 |
-| --- | --- |
-| Git | 如何记录和同步工程历史 |
-| 桌面端 C 构建 | `.c` 如何变成可执行文件 |
-| 嵌入式构建 | `.c` 如何变成 MCU 固件 |
-| EIDE | 自动构建系统保存了哪些配置 |
-| 外设寄存器 | 配置外设本质上在写什么 |
-| CubeMX | 如何生成真实 STM32 工程 |
-| C OOP | 如何用 C 管理复杂模块 |
+| 章节          | 核心问题                   |
+| ------------- | -------------------------- |
+| Git           | 如何记录和同步工程历史     |
+| 桌面端 C 构建 | `.c` 如何变成可执行文件    |
+| 嵌入式构建    | `.c` 如何变成 MCU 固件     |
+| EIDE          | 自动构建系统保存了哪些配置 |
+| 外设寄存器    | 配置外设本质上在写什么     |
+| CubeMX        | 如何生成真实 STM32 工程    |
+| C OOP         | 如何用 C 管理复杂模块      |
 
 ---
 
 # 三个 Project 的定位
 
-| Project | 你应该记住 |
-| --- | --- |
-| `proj-1` | C 工程如何被 `gcc` 构建 |
-| `proj-2` | 固件为什么需要 startup 和 linker script |
+| Project  | 你应该记住                                |
+| -------- | ----------------------------------------- |
+| `proj-1` | C 工程如何被 `gcc` 构建                   |
+| `proj-2` | 固件为什么需要 startup 和 linker script   |
 | `proj-3` | 真实 STM32 工程如何生成、配置、编译、烧录 |
 
 ---
