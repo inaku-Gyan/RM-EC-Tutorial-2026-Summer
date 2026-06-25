@@ -767,87 +767,197 @@ layout: section
 ---
 
 # 5 - CMSIS-RTOS2 API
+
 使用示例
 
 ---
 
-# Thread：把职责拆开
+# Thread Management
+
+**Thread**（线程）是 CMSIS-RTOS 调度的基本对象。（在 FreeRTOS 中称为 **Task**）
 
 ```c
-osThreadNew(MotorTask, NULL, &motorTaskAttr);
-osThreadNew(RemoteTask, NULL, &remoteTaskAttr);
-osThreadNew(UITask, NULL, &uiTaskAttr);
-```
-
-```c
-void MotorTask(void *argument) {
+__NO_RETURN void MotorThreadFunc(void *argument) {
     for (;;) {
         motor_control();
-        osDelay(1);
-    }
-}
-```
-
-- 每个任务有自己的循环
-- 每个任务有自己的 stack
-- 周期任务可以写成“做事，然后等待”
-
-任务函数不可自行 return，若要结束任务，必须使用 `osThreadTerminate()`。
-
----
-
-# Delay：等待时让出 CPU
-
-```c
-void UITask(void *argument) {
-    for (;;) {
-        ui_update();
         osDelay(100);
     }
 }
 ```
 
-`osDelay()` 的意义：
+- 每个 thread 有自己的执行上下文
+- 每个 thread 有自己的 stack
+- scheduler 在多个 ready thread 之间切换
+- thread 可以阻塞等待，不必一直占着 CPU
 
-- 不是忙等
-- 当前 task 进入等待状态
-- 调度器可以运行其他 ready task
-- 延时结束后 task 再变回 ready
+任务函数不可直接 `return`，如果确实要结束任务，使用 `osThreadExit()`
 
 ---
 
-# Queue：让事件带着数据流动
+### Example 1: 创建一个简单的 thread
+
+```c
+__NO_RETURN void thread_func(void * /* Unused */) {
+
+    do_init_work();
+
+    for (;;) {
+        do_periodic_work();
+        osDelay(100);
+    }
+}
+```
+
+```c
+int main(void) {
+    // ...
+
+    osKernelInitialize();
+
+    osThreadNew(thread_func, NULL, NULL);     // Create thread with default settings
+
+    osKernelStart();                          // Start the scheduler
+}
+```
+
+---
+
+### Example 2: 传递参数
+
+相同的逻辑，公共的线程函数：
+
+```c
+__NO_RETURN void recv_thread(void * argument) {
+    UartHandle_t *huart = (UART_Handle_t *)argument;
+    uint8_t rx_buffer[128];
+    for (;;) {
+        size_t rx_size = uart_receive(huart, rx_buffer, sizeof(rx_buffer));
+        parse_and_handle(rx_buffer, rx_size);
+    }
+}
+```
+
+创建两个*不同的 thread*，分别处理不同的 UART：
+
+```c
+osThreadNew(recv_thread, huart_1, NULL);     // Create thread with default settings
+osThreadNew(recv_thread, huart_2, NULL);     // Create another thread with different parameter
+```
+
+---
+
+### Example 3: 使用属性创建 thread
+
+```c
+const osThreadAttr_t attr = {
+    .name = "Motor task",           // 线程名称，可在调试时显示
+    .priority = osPriorityHigh,     // 线程优先级
+    .stack_size = 512,              // 线程栈大小（字节）（动态分配）
+};
+
+osThreadNew(motor_thread, NULL, &attr);
+```
+
+静态分配栈大小：
+
+```c
+uint8_t stack_buffer[512];               // 预分配一片内存
+
+const osThreadAttr_t attr = {
+    .stack_mem = stack_buffer,           // 指向预分配的栈内存
+    .stack_size = sizeof(stack_buffer),  // 栈大小
+};
+```
+
+---
+
+# 周期任务：`osDelay` 与 `osDelayUntil`
+
+简单周期等待：
+
+```c
+void UITask(void *) {
+    for (;;) {
+        ui_update();
+        osDelay(100);         // 周期为 100 ticks
+    }
+}
+```
+
+更稳定的周期表达：
+
+```c
+void MotorTask(void *) {
+    uint32_t next = osKernelGetTickCount();
+
+    for (;;) {
+        next += 2;             // 周期为 2 ticks
+        motor_control();
+        osDelayUntil(next);
+    }
+}
+```
+
+---
+
+# Message Queue
+
+**Message Queue**（消息队列）本质是一个线程安全队列，用于在不同上下文之间传递数据。
+
+### Example 1: 创建一个 message queue
 
 ```c
 typedef struct {
     uint8_t data[18];
     uint32_t tick;
 } RemoteFrame;
+
+osMessageQueueId_t remote_queue;
+
+remote_queue = osMessageQueueNew(/* msg_count */ 8, /* msg_size */ sizeof(RemoteFrame), /* attr */ NULL);
 ```
 
-```c
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    RemoteFrame frame = remote_make_frame();
-    osMessageQueuePut(remoteQueue, &frame, 0, 0);
-}
-```
-
-队列适合“事件发生，并且要携带数据”的场景。
+- queue 里保存固定大小的 message
+- `msg_count` 决定最多缓存多少条
+- `msg_size` 决定每条 message 的大小
+- 没有 message 时，接收 thread 可以阻塞等待
 
 ---
 
-# Queue：任务等待消息
+### Example 2: 从中断投递 message
+
+中断里只复制一帧数据，不在中断里解析协议。
 
 ```c
-void RemoteTask(void *argument) {
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    RemoteFrame frame;
+
+    remote_copy_rx_data(frame.data);
+    frame.tick = osKernelGetTickCount();
+
+    osMessageQueuePut(
+        remote_queue,
+        &frame,
+        0,      // msg_prio: 入门阶段通常不用
+        0       // timeout: ISR 中必须不等待
+    );
+}
+```
+
+---
+
+### Example 3: thread 等待 message
+
+```c
+void remote_thread(void *argument) {
     RemoteFrame frame;
 
     for (;;) {
         osMessageQueueGet(
-            remoteQueue,
+            remote_queue,
             &frame,
-            NULL,
-            osWaitForever
+            NULL,              // msg_prio
+            osWaitForever      // timeout: 阻塞等待，直到有 message
         );
 
         remote_parse_frame(&frame);
@@ -855,55 +965,114 @@ void RemoteTask(void *argument) {
 }
 ```
 
-- 没有消息时，任务睡眠等待
-- 收到消息后，任务被唤醒
-- 比主循环反复检查 flag 更清晰
+没有数据时，`remote_thread` blocked；收到 message 后才继续运行。
 
 ---
 
-# Flags / Semaphore：轻量通知
+### Example 4: 使用属性创建 queue
 
 ```c
-void HAL_GPIO_EXTI_Callback(uint16_t pin) {
-    osThreadFlagsSet(remoteTaskHandle, REMOTE_RX_FLAG);
-}
+#define MSG_COUNT 8
+#define MSG_SIZE sizeof(RemoteFrame)
+
+uint8_t queue_buffer[MSG_COUNT * MSG_SIZE];  // 预分配一片内存
+
+const osMessageQueueAttr_t attr = {
+    .name = "Remote queue",    // 调试时显示
+    .mq_mem = queue_buffer,    // 指向预分配的内存
+    .mq_size = sizeof(queue_buffer),
+};
+
+remote_queue = osMessageQueueNew(
+    MSG_COUNT,
+    MSG_SIZE,
+    &attr
+);
 ```
 
-```c
-void RemoteTask(void *argument) {
-    for (;;) {
-        osThreadFlagsWait(
-            REMOTE_RX_FLAG,
-            osFlagsWaitAny,
-            osWaitForever
-        );
-
-        remote_handle_event();
-    }
-}
-```
-
-只需要通知“发生了”，可以用 flags 或 semaphore。
+如果没有提供 `mq_mem`，则 queue 内部会动态分配内存。
 
 ---
 
-# Mutex：保护共享资源
+### Example 5: put/get 的等待策略
 
 ```c
-void log_printf(const char *msg) {
-    osMutexAcquire(logMutex, osWaitForever);
-    debug_print(msg);
-    osMutexRelease(logMutex);
+osStatus_t status;
+
+status = osMessageQueuePut(remote_queue, &frame, 0, 0);      // timeout = 0, 不等待
+if (status != osOK) {
+    remote_drop_count++;
 }
 ```
 
-典型共享资源：
+```c
+status = osMessageQueueGet(remote_queue, &frame, NULL, 20);  // timeout = 20 ticks, 最多等 20 tick
+if (status == osOK) {
+    remote_parse_frame(&frame);
+} else if (status == osErrorTimeout) {
+    enter_safe_mode();
+}
+```
 
-- 调试串口
-- 共享状态结构
-- 同一组外设寄存器访问
+- `timeout = 0`：不等待，queue 满/空就立即返回
+- `timeout = osWaitForever`：一直等
+- 有 timeout 时，可以把通信超时保护写在同一个 thread 里
 
-mutex 只保护确实共享且可能冲突的资源。
+---
+
+# Queue 的使用边界
+
+| 需求             | 适合用 queue 吗        |
+| ---------------- | ---------------------- |
+| 传递完整数据帧   | 适合：`RemoteFrame`    |
+| 传递调试日志消息 | 适合：日志结构体或指针 |
+| 只通知“发生了”   | 不一定需要 queue       |
+| 共享串口互斥访问 | 不适合，应使用 `Mutex` |
+
+Message queue 内部会复制 message。
+
+如果数据很大，通常传指针或 buffer id，而不是直接塞大结构体。
+
+---
+
+# API 能不能在 ISR 中使用？
+
+```c
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    osMessageQueuePut(remote_queue, &frame, 0, 0);
+}
+```
+
+```c
+void remote_thread(void *argument) {
+    osMessageQueueGet(remote_queue, &frame, NULL, osWaitForever);
+}
+```
+
+分析一个 API 能不能在 ISR 中使用：
+
+- ISR 中不能阻塞等待：
+  - `osDelay`、`osDelayUntil` 不能用，`osMutexAcquire` 不能用
+  - `timeout` 不能大于 0（必要条件）
+- 一般地，`New`、`Delete` 不可在 ISR 中使用，比如 `osMessageQueueNew`
+- 官方**文档**给每个 API 都标注了是否可以在 ISR 中使用。
+
+---
+
+# 如何学习使用 API？查文档
+
+Arm CMSIS-RTOS2 文档（直接 Google 即可搜出）：
+
+- Version 2.3.0: https://arm-software.github.io/CMSIS_6/latest/RTOS2/index.html
+- Version 2.2.0: https://arm-software.github.io/CMSIS_5/develop/RTOS2/html/index.html
+
+重点关注：
+
+1. 函数原型：参数和返回值（一般是错误代码）是什么
+2. ISR 说明：能不能在中断里调用
+3. 相关 API：new / delete / put / get 通常成组出现
+
+对于新的 API，可以看示例代码。
 
 ---
 layout: section
@@ -917,14 +1086,14 @@ layout: section
 
 # 把示例需求组合起来
 
-| 需求                 | RTOS 机制                |
-| -------------------- | ------------------------ |
-| 电机稳定周期控制     | `MotorTask` + `osDelay`  |
-| 遥控器收到一帧再解析 | `osMessageQueue`         |
-| 掉线超时保护         | `SafetyTask` + timestamp |
-| UI 低频刷新          | `UITask` + low priority  |
-| 日志不要影响控制     | `LogTask` + queue        |
-| 多 task 共享串口     | `osMutex`                |
+| 需求                 | RTOS 机制                    |
+| -------------------- | ---------------------------- |
+| 电机稳定周期控制     | `MotorTask` + `osDelayUntil` |
+| 遥控器收到一帧再解析 | `MessageQueue`               |
+| 掉线超时保护         | `SafetyTask` + timestamp     |
+| UI 低频刷新          | `UITask` + low priority      |
+| 日志不要影响控制     | `LogTask` + queue            |
+| 多 task 共享串口     | `Mutex`                      |
 
 这不是 API 清单，而是一组架构工具。
 
@@ -946,7 +1115,9 @@ flowchart LR
   LogTask[LogTask] --> UARTLog[Debug UART]
 ```
 
-异步输入通过队列进入任务，周期控制通过 task 自己的节奏运行。
+异步输入通过 queue 交给任务处理。
+
+周期控制通过 task 自己的节奏运行。
 
 ---
 
