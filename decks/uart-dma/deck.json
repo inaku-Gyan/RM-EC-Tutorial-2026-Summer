@@ -1,5 +1,5 @@
 {
   "$schema": "../../schemas/deck.schema.json",
   "order": 3,
-  "visibility": "hidden"
+  "visibility": "listed"
 }
