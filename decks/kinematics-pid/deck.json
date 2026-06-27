@@ -1,0 +1,5 @@
+{
+  "$schema": "../../schemas/deck.schema.json",
+  "order": 4,
+  "visibility": "listed"
+}
