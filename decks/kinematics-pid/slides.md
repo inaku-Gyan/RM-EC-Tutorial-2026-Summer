@@ -408,25 +408,32 @@ layout: section
 
 # <Counter :level="1" /> - PID Control
 
-从单个电机速度环开始
+用一个电机速度环例子理解 P / I / D
 
 ---
 
-# <Counter :level="2" /> 单电机速度环
+# <Counter :level="2" /> 例子：让电机稳定在 1000 rpm
 
 ```mermaid
 flowchart LR
-  Target[target rpm] --> Sum[error = target - feedback]
-  Feedback[encoder rpm] --> Sum
-  Sum --> PID[PID]
-  PID --> Output[current command]
-  Output --> Motor[motor]
-  Motor --> Feedback
+  R[目标速度<br/>1000 rpm] --> E[误差<br/>e = r - y]
+  Y[编码器反馈<br/>实际 rpm] --> E
+  E --> C[速度环控制器]
+  C --> U[输出<br/>电流 / 电压指令]
+  U --> M[电机 + 负载]
+  M --> Y
 ```
+
+先约定一个简化模型：
+
+- 目标速度：$r = 1000\ \text{rpm}$
+- 电机需要持续约 $2\ \text{V}$ 的等效输出，才能克服摩擦和负载
+- 编码器反馈速度记为 $y$
+- 控制器看到的误差是 $e = r - y$
 
 ---
 
-# 误差：控制器真正看到的量
+# 误差：速度环真正看到的量
 
 ```mermaid
 flowchart LR
@@ -435,7 +442,7 @@ flowchart LR
   E --> U[控制输出 u]
 ```
 
-PID 不直接关心“电机为什么慢了”。
+PID 不直接知道“电机为什么慢了”。
 
 它先只看一件事：目标值和反馈值差了多少。
 
@@ -448,27 +455,41 @@ $$
 - $e(t)$：error，误差
 
 ---
-layout: two-cols-header
+layout: two-cols
 ---
 
 # <Counter :level="2" /> Proportional：看到误差就推一把
 
-::left::
+P 项的思想很直接：
 
-P 项像一个“弹簧”：
-
+- 实际速度低于目标，输出变大
 - 离目标越远，推得越用力
-- 离目标越近，推力自然变小
-- $K_{\mathrm{p}}$ 越大，反应越快，但也越容易震荡
+- 离目标越近，输出自然变小
+
+例如：
+
+$$
+K_{\mathrm{p}} = 0.1\ \text{V}/\text{rpm}
+$$
+
+当实际速度只有 $980\ \text{rpm}$：
+
+$$
+e = 1000 - 980 = 20\ \text{rpm}
+$$
+
+$$
+u_{\mathrm{P}} = 0.1 \times 20 = 2\ \text{V}
+$$
 
 ::right::
 
 ```mermaid
 xychart-beta
-  title "P: larger error -> larger output"
-  x-axis "error" [-3, -2, -1, 0, 1, 2, 3]
-  y-axis "output" -6 --> 6
-  line "P output" [-6, -4, -2, 0, 2, 4, 6]
+  title "P: error creates output"
+  x-axis "error / rpm" [0, 10, 20, 30, 40, 50]
+  y-axis "output / V" 0 --> 5
+  line "u_P" [0, 1, 2, 3, 4, 5]
 ```
 
 ---
@@ -485,24 +506,79 @@ $$
 - $K_{\mathrm{p}}$：比例系数
 - $e(t)$：当前误差
 
-只用 P 控制时，很多系统会留下稳态误差：明明已经接近目标，但负载和摩擦让它差一点到不了。
+P 项的好处是响应快，坏处也很清楚：
 
+$$
+e(t) = 0 \quad \Rightarrow \quad u_{\mathrm{P}}(t) = 0
+$$
+
+但电机要维持速度，往往需要持续输出转矩。
+
+所以纯 P 速度环如果没有前馈，常常必须“保留一点误差”，才能维持非零输出。
+
+---
+layout: two-cols
+---
+
+# 纯 P 速度环：为什么会有静差
+
+如果负载需要 $2\ \text{V}$ 才能维持速度，而 $K_{\mathrm{p}}=0.1\ \text{V}/\text{rpm}$：
+
+$$
+2 = 0.1 e
+$$
+
+$$
+e = 20\ \text{rpm}
+$$
+
+最终就可能稳定在：
+
+$$
+y = 1000 - 20 = 980\ \text{rpm}
+$$
+
+这就是稳态误差，也常叫静差。
+
+::right::
+
+```mermaid
+xychart-beta
+  title "P only: settles below target"
+  x-axis "time" [0, 1, 2, 3, 4, 5, 6, 7, 8]
+  y-axis "speed / rpm" 0 --> 1100
+  line "target" [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
+  line "feedback" [0, 420, 690, 835, 920, 960, 976, 980, 980]
+```
+
+---
+layout: two-cols
 ---
 
 # <Counter :level="2" /> Integral：把过去没补上的误差记下来
 
 ```mermaid
 flowchart LR
-  E[每一时刻的误差] --> B[积分累积<br/>error area]
-  B --> U[逐渐增加的补偿输出]
+  E[长期存在的误差] --> B[积分累积<br/>误差面积]
+  B --> U[保留下来的补偿输出]
 ```
 
-I 项像一个“账本”：
+- 只要 $20\ \text{rpm}$ 的误差还在，它就继续累加
+- 积分输出从 $0.5\ \text{V}$、$1\ \text{V}$、$1.5\ \text{V}$ 逐渐长到约 $2\ \text{V}$
+- 最后可以做到 $e \approx 0$，但仍然有非零输出维持电机转速
 
-- 误差长期存在，就持续累加
-- 累加越多，补偿越强
-- 它适合消除稳态误差
-- 但如果不限制，容易累过头，造成明显超调
+::right::
+
+一个理想的稳定状态是：
+
+| 量       | 结果                  |
+| -------- | --------------------- |
+| 目标速度 | $1000\ \text{rpm}$    |
+| 实际速度 | $1000\ \text{rpm}$    |
+| 当前误差 | $0\ \text{rpm}$       |
+| P 项输出 | $0\ \text{V}$         |
+| I 项输出 | $\approx 2\ \text{V}$ |
+| 总输出   | $\approx 2\ \text{V}$ |
 
 ---
 
@@ -520,29 +596,120 @@ $$
 - $K_{\mathrm{i}}$：积分系数
 - $\int_{0}^{t} e(\tau)\,\mathrm{d}\tau$：从过去到现在的误差面积
 
+即使当前误差已经为零，历史积分也不一定为零：
+
+$$
+e(t) = 0
+\quad \nRightarrow \quad
+\int_{0}^{t} e(\tau)\,\mathrm{d}\tau = 0
+$$
+
+这就是积分项能消除静差的原因。
+
 ---
-layout: two-cols-header
+layout: two-cols
 ---
 
-# <Counter :level="2" /> Derivative：看到变化趋势就提前刹车
+# 加上 I：静差被慢慢消掉
 
-::left::
+积分项解决的是“长期差一点”的问题。
 
-D 项像“阻尼”：
+它会在误差持续存在时积累补偿，直到电机能在 $e \approx 0$ 时仍然保持必要输出。
 
-- 误差变化越快，D 项反应越强
-- 它可以抑制超调，让系统不那么冲
-- 它对噪声很敏感，速度环里经常先不加或只加很小
+但它也会带来新的风险：如果积分累得太多，系统可能冲过目标。
 
 ::right::
 
 ```mermaid
 xychart-beta
-  title "D: reacts to slope"
-  x-axis "time" [0, 1, 2, 3, 4, 5, 6]
-  y-axis "error" -2 --> 6
-  line "fast change" [0, 4, 5, 4, 2, 1, 0]
-  line "slow change" [0, 1, 2, 3, 3, 2, 1]
+  title "PI: reaches target after accumulated compensation"
+  x-axis "time" [0, 1, 2, 3, 4, 5, 6, 7, 8]
+  y-axis "speed / rpm" 0 --> 1100
+  line "target" [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
+  line "feedback" [0, 450, 720, 875, 955, 990, 1002, 1000, 1000]
+```
+
+---
+layout: two-cols-header
+---
+
+# 积分不是唯一办法：前馈也很常见
+
+::left::
+
+如果我们已经知道维持 $1000\ \text{rpm}$ 大约需要 $2\ \text{V}$，可以先直接给一个基础输出：
+
+$$
+u(t) = u_{\mathrm{ff}}(t) + K_{\mathrm{p}} e(t)
+$$
+
+其中：
+
+- $u_{\mathrm{ff}}(t)$：feedforward，前馈输出
+- $K_{\mathrm{p}} e(t)$：只负责修正误差
+
+::right::
+
+```mermaid
+flowchart LR
+  R[target rpm] --> FF[feedforward<br/>about 2 V]
+  R --> E[error]
+  Y[feedback rpm] --> E
+  E --> P[P correction]
+  FF --> S[sum]
+  P --> S
+  S --> M[motor]
+  M --> Y
+```
+
+前馈依赖模型或标定；积分依赖反馈自动补偿。工程里两者经常一起用。
+
+---
+layout: two-cols
+---
+
+# 速度环里常见的是 PI
+
+原因：
+
+- P：决定速度环响应有多快
+- I：消除摩擦、负载造成的稳态误差
+- D：会放大编码器量化误差和速度估计噪声，速度环里通常不用或只给很小
+
+很多电机控制系统会分成多层。
+
+::right::
+
+```mermaid
+flowchart TB
+  P0[位置环<br/>常见 P] --> V[速度环<br/>常见 PI]
+  V --> I[电流环<br/>常见 PI]
+  I --> PWM[PWM / CAN current command]
+```
+
+---
+layout: two-cols
+---
+
+# <Counter :level="2" /> Derivative：看到变化趋势就提前刹车
+
+PI 如果调得比较激进，可能会先冲过目标。
+
+D 项看的不是“差多少”，而是“误差变化有多快”：
+
+- 接近目标太快，就提前减小输出
+- 冲过目标后误差反向变化，也会提供阻尼
+- 它可以抑制超调，但对噪声敏感
+
+::right::
+
+```mermaid
+xychart-beta
+  title "Before D: PI may overshoot"
+  x-axis "time" [0, 1, 2, 3, 4, 5, 6, 7]
+  y-axis "speed / rpm" 0 --> 1200
+  line "target" [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
+  line "feedback" [0, 620, 930, 1105, 1160, 1070, 1015, 1000]
 ```
 
 ---
@@ -562,6 +729,31 @@ $$
 - $\frac{\mathrm{d}e(t)}{\mathrm{d}t}$：误差随时间变化的速度
 
 两个 $\mathrm{d}$ 都是微分算子，使用直体；$e$ 和 $t$ 是变量，使用斜体。
+
+---
+layout: two-cols
+---
+
+# 加上 D：用趋势抑制超调
+
+但在真实速度环中，D 项不一定值得加：
+
+- 编码器速度反馈可能有量化跳变
+- 速度估计本身常带噪声
+- 微分会放大高频噪声，让输出抖动
+
+因此入门实现速度环时，常从 PI 开始。
+
+::right::
+
+```mermaid
+xychart-beta
+  title "With D: more damping, less overshoot"
+  x-axis "time" [0, 1, 2, 3, 4, 5, 6, 7]
+  y-axis "speed / rpm" 0 --> 1200
+  line "target" [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
+  line "with D" [0, 560, 840, 970, 1025, 1010, 1002, 1000]
+```
 
 ---
 
@@ -627,7 +819,7 @@ $$
 
 ---
 
-# 离散 PID 输出
+# 位置式离散 PID 输出
 
 $$
 \begin{aligned}
@@ -637,8 +829,7 @@ u_{\mathrm{I}}[k] +
 u_{\mathrm{D}}[k] \\
 &= K_{\mathrm{p}} e[k]
 + \left(u_{\mathrm{I}}[k-1] + K_{\mathrm{i}} e[k] T_{\mathrm{s}}\right)
-+ K_{\mathrm{d}} \frac{e[k] - e[k-1]}{T_{\mathrm{s}}} \\
-&= u[k-1] + K_{\mathrm{p}} (e[k] - e[k-1]) + K_{\mathrm{i}} e[k] T_{\mathrm{s}} + K_{\mathrm{d}} \frac{e[k] - e[k-1]}{T_{\mathrm{s}}}
++ K_{\mathrm{d}} \frac{e[k] - e[k-1]}{T_{\mathrm{s}}}
 \end{aligned}
 $$
 
@@ -691,7 +882,7 @@ layout: two-cols-header
 
 $$
 \begin{aligned}
-u[k] = u[k-1] 
+u[k] = u[k-1]
 &+ K_{\mathrm{p}} (e[k] - e[k-1]) \\
 &+ K_{\mathrm{i}} e[k] T_{\mathrm{s}} \\
 &+ K_{\mathrm{d}} \frac{e[k] - e[k-1]}{T_{\mathrm{s}}}
@@ -757,14 +948,21 @@ $$
 其中：
 
 $$
-A_0 = K_{\mathrm{p}} + K_{\mathrm{i}} + K_{\mathrm{d}}
+A_0 =
+K_{\mathrm{p},\text{CMSIS}} +
+K_{\mathrm{i},\text{CMSIS}} +
+K_{\mathrm{d},\text{CMSIS}}
 $$
 
 $$
-A_1 = -K_{\mathrm{p}} - 2K_{\mathrm{d}},
+A_1 =
+-K_{\mathrm{p},\text{CMSIS}} -
+2K_{\mathrm{d},\text{CMSIS}},
 \qquad
-A_2 = K_{\mathrm{d}}
+A_2 = K_{\mathrm{d},\text{CMSIS}}
 $$
+
+这里的 $K_{\mathrm{p},\text{CMSIS}}$、$K_{\mathrm{i},\text{CMSIS}}$、$K_{\mathrm{d},\text{CMSIS}}$ 已经吸收了控制周期。
 
 ---
 
@@ -814,20 +1012,6 @@ PID 参数和控制周期绑定。
 | 任务偶发卡顿              | 电机输出可能出现尖峰         |
 
 速度环任务应该使用稳定周期。
-
-如果参数来自连续 PID 推导，常见处理是：
-
-$$
-K_{\mathrm{p,cmsis}} = K_{\mathrm{p}}
-$$
-
-$$
-K_{\mathrm{i,cmsis}} = K_{\mathrm{i}}T_{\mathrm{s}}
-$$
-
-$$
-K_{\mathrm{d,cmsis}} = \frac{K_{\mathrm{d}}}{T_{\mathrm{s}}}
-$$
 
 ---
 layout: section
