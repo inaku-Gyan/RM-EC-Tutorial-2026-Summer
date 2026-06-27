@@ -44,25 +44,6 @@ layout: section
 
 ---
 
-# 起点：周期发送调试包
-
-假设 LED 已经完全封装好：
-
-```c
-void led_green_blink(void);
-void led_red_blink(void);
-```
-
-我们希望主循环每 100 ms 发送一次调试包：
-
-```text
-robot state -> build debug packet -> UART TX
-```
-
-发送成功闪一下绿灯，发送失败闪一下红灯。
-
----
-
 # 阻塞发送
 
 ```c
@@ -71,12 +52,7 @@ static uint8_t tx_buf[64];
 while (1) {
     uint16_t len = debug_build_packet(tx_buf, sizeof(tx_buf));
 
-    HAL_StatusTypeDef status = HAL_UART_Transmit(
-        &huart2,
-        tx_buf,
-        len,
-        20
-    );
+    HAL_StatusTypeDef status = HAL_UART_Transmit(&huart2, tx_buf, len, 20); // timeout 20 ms
 
     if (status == HAL_OK) {
         led_green_blink();
@@ -88,34 +64,39 @@ while (1) {
 }
 ```
 
+- 主循环每 100 ms 发送一次调试包
+- 发送成功闪一下绿灯，发送失败闪一下红灯
+
 代码顺序非常直观：发送完成后才继续往下走。
 
 ---
 
 # 阻塞发送的特点
 
-| 特点       | 影响                                   |
-| ---------- | -------------------------------------- |
-| 写法简单   | 适合第一版验证 UART 是否能发           |
-| 顺序明确   | 返回后就知道成功或失败                 |
-| 当前流等待 | 发送期间主循环不能执行其他逻辑         |
-| timeout    | timeout 太短容易失败，太长会拖慢主循环 |
-
-阻塞 API 不一定错误，但它会把“等待外设”变成“暂停当前执行流”。
+| 特点           | 影响                                   |
+| -------------- | -------------------------------------- |
+| 写法简单       | 适合第一版验证 UART 是否能发           |
+| 顺序明确       | 返回后就知道成功或失败                 |
+| 暂停当前执行流 | 发送期间主循环不能执行其他逻辑         |
+| timeout        | timeout 太短容易失败，太长会拖慢主循环 |
 
 ---
 
-# 发送时间不是 0
+# 发送时间消耗
 
 UART 发送时间由波特率决定。
 
 以 115200 bps 估算：
 
-```text
-1 byte ~= 10 bits
-64 bytes ~= 640 bits
-640 / 115200 ~= 5.6 ms
-```
+$$
+\begin{aligned}
+1\ \text{byte} &= 8\ \text{data bits} \\
+1\ \text{UART frame} &= 1\ \text{start bit} + 8\ \text{data bits} + 1\ \text{stop bit}
+= 10\ \text{bits} \\\\
+64\ \text{bytes} &\Rightarrow 64 \times 10 = 640\ \text{bits on wire} \\\\
+\frac{640\ \text{bits}}{115200\ \text{bits/s}} &\approx 5.56\ \text{ms}
+\end{aligned}
+$$
 
 如果主循环里还有 1 ms 或 2 ms 周期任务，5 ms 级别的阻塞已经很明显。
 
@@ -123,9 +104,9 @@ UART 发送时间由波特率决定。
 layout: section
 ---
 
-# 2 - Use IT
+# 2 - 中断发送
 
-主循环有别的任务时，用中断发送
+使用中断异步发送，避免阻塞
 
 ---
 
@@ -133,20 +114,23 @@ layout: section
 
 ```c
 while (1) {
-    uint32_t now = HAL_GetTick();
+    do_task_1();
+    do_task_2();
+    do_task_3();
 
-    if (now - last_motor >= 2) {
-        last_motor = now;
-        motor_task();
-    }
-
-    if (now - last_ui >= 20) {
-        last_ui = now;
-        ui_task();
-    }
-
-    safety_check();
     debug_send_periodic();
+}
+```
+
+```c
+void debug_send_periodic(void) {
+    uint16_t len = debug_build_packet(tx_buf, sizeof(tx_buf));
+
+    HAL_StatusTypeDef status = HAL_UART_Transmit(&huart2, tx_buf, len, 20);
+
+    if (status == HAL_OK)
+        led_green_blink();
+    else led_red_blink();
 }
 ```
 
@@ -163,9 +147,7 @@ static volatile bool tx_done = false;
 static volatile bool tx_error = false;
 
 void debug_send_periodic(void) {
-    if (tx_busy) {
-        return;
-    }
+    if (tx_busy) return;
 
     uint16_t len = debug_build_packet(tx_buf, sizeof(tx_buf));
 
@@ -184,35 +166,7 @@ void debug_send_periodic(void) {
 
 ---
 
-# 主循环检查发送结果
-
-```c
-void debug_tx_poll_result(void) {
-    if (tx_done) {
-        tx_done = false;
-        led_green_blink();
-    }
-
-    if (tx_error) {
-        tx_error = false;
-        led_red_blink();
-    }
-}
-
-while (1) {
-    scheduler_run();
-    debug_send_periodic();
-    debug_tx_poll_result();
-}
-```
-
-发送完成由中断通知，主循环只消费结果。
-
----
-
-# 先用 weak callback
-
-HAL 里很多 callback 是弱函数。用户自己实现同名函数后，会覆盖 HAL 默认实现。
+# 在中断回调中更新状态标志
 
 ```c
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
@@ -230,7 +184,63 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
 }
 ```
 
-这适合入门：先看懂“外设完成后会回调用户代码”。
+---
+
+# 主循环检查发送结果
+
+```c
+void debug_tx_poll_result(void) {
+    if (tx_done) {
+        tx_done = false;
+        led_green_blink();
+    }
+
+    if (tx_error) {
+        tx_error = false;
+        led_red_blink();
+    }
+}
+```
+
+```c
+while (1) {
+    scheduler_run();
+    debug_send_periodic();
+    debug_tx_poll_result();
+}
+```
+
+发送完成由中断通知，主循环只消费结果。
+
+---
+
+# 弱函数
+
+HAL 中（`stm32f4xx_hal_uart.c`），这些中断回调函数被定义为弱函数：
+
+```c
+/**
+  * @brief  Tx Transfer completed callbacks.
+  * @param  huart  Pointer to a UART_HandleTypeDef structure that contains
+  *                the configuration information for the specified UART module.
+  */
+__weak void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+  /* NOTE: This function should not be modified, when the callback is needed,
+           the HAL_UART_TxCpltCallback could be implemented in the user file
+   */
+}
+```
+
+用户自己实现同名函数后，会覆盖 HAL 默认实现：
+
+```c
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart == &huart2) {
+        // ...
+    }
+}
+```
 
 ---
 
@@ -254,13 +264,13 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 | 依赖 `if` 分发 | UART 越多，callback 越长     |
 | 模块边界不清楚 | 串口模块逻辑散落到全局文件里 |
 
-下一步：把 callback 注册到模块里。
+**优化方法**：把 callback *注册到模块*里，形成*高内聚*、*低耦合*的代码组织结构。
 
 ---
 
 # Register Callback
 
-先在 HAL 配置中打开：
+HAL 配置（若在 CubeMX 中：`Project Manager -> Advanced Settings -> Register Callback`）：
 
 ```c
 #define USE_HAL_UART_REGISTER_CALLBACKS 1U
@@ -269,13 +279,13 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 然后注册 callback：
 
 ```c
-static void debug_uart_tx_done_callback(UART_HandleTypeDef *huart);
+static void debug_uart_tx_done_callback(UART_HandleTypeDef *huart);   // 分模块和功能定义和实现回调函数
 static void debug_uart_error_callback(UART_HandleTypeDef *huart);
 
 void debug_uart_init(void) {
     HAL_UART_RegisterCallback(
-        &huart2,
-        HAL_UART_TX_COMPLETE_CB_ID,
+        &huart2,                      // 将回调函数注册到具体的 UART 实例上，不同的 UART 示例互不影响
+        HAL_UART_TX_COMPLETE_CB_ID,   // 绑定对应的事件，不同的事件互不影响
         debug_uart_tx_done_callback
     );
 
@@ -287,23 +297,17 @@ void debug_uart_init(void) {
 }
 ```
 
-从这里开始，后续示例都使用注册回调，不再使用 weak callback。
-
 ---
 
 # 注册后的 callback
 
 ```c
 static void debug_uart_tx_done_callback(UART_HandleTypeDef *huart) {
-    (void)huart;
-
     tx_busy = false;
     tx_done = true;
 }
 
 static void debug_uart_error_callback(UART_HandleTypeDef *huart) {
-    (void)huart;
-
     tx_busy = false;
     tx_error = true;
 }
@@ -315,7 +319,7 @@ callback 名字变成模块自己的名字，不再占用 HAL 全局弱函数。
 layout: section
 ---
 
-# 3 - Use DMA
+# 3 - DMA
 
 大数据量发送时让 DMA 搬数据
 
