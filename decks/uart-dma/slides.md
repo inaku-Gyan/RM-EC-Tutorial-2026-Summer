@@ -325,9 +325,7 @@ layout: section
 
 ---
 
-# IT 发送的边界
-
-`HAL_UART_Transmit_IT` 避免了主循环阻塞，但每次发送进度仍由中断推进。
+# 普通 IT 发送路径：CPU 仍逐字节参与
 
 当发送内容变大时：
 
@@ -338,41 +336,150 @@ layout: section
 
 CPU 会更频繁地进入 UART 中断。
 
-DMA 的目标：让 DMA controller 负责从内存搬数据到 UART。
+关键点：
+
+- 不阻塞主循环
+- 但每个字节仍需要 CPU 进入 UART IRQ
+- ISR 里由 CPU 写一次 `UART->DR`
 
 ---
 
-# DMA 发送路径
+# DMA: Direct Memory Access
+
+DMA Controller 是 MCU 内部的独立数据搬运单元。
+
+CPU 不再逐字节执行：
+
+```c
+UART->DR = *p++;
+```
+
+而是先配置一次 DMA：
+
+- 源地址：内存中的 TX buffer
+- 目标地址：UART 数据寄存器 `DR`
+- 搬运长度：`len`
+
+之后 UART 每需要一个新字节，就向 DMA controller 发出 request。
+
+DMA 负责把下一个字节从内存搬到 `UART->DR`。
+
+关键点：DMA 不会让 UART 波特率变快，它降低的是 CPU 逐字节参与发送的调度占用。
+
+---
+layout: two-cols
+---
+
+## 普通 IT 发送路径
+
+`HAL_UART_Transmit_IT` 避免了主循环阻塞，但每次发送进度仍由中断推进。
 
 ```mermaid
 sequenceDiagram
-  participant M as Main loop
-  participant H as HAL UART
-  participant D as DMA
-  participant B as TX Buffer
-  participant U as UART
-  participant C as Registered Callback
+  box CPU
+    participant Main as Main loop
+    participant Cb as HAL_UART_TxCpltCallback()
+    participant TxIt as UART_Transmit_IT()
+  end
+  participant U@{ "type": "boundary" } as UART
 
-  M->>H: HAL_UART_Transmit_DMA
-  H->>D: configure source buffer
-  D->>B: read bytes
-  D->>U: feed UART data register
-  D-->>C: transfer complete IRQ
-  C-->>M: set tx_done flag
+  activate Main
+  Main->>+U: HAL_UART_Transmit_IT: 启动 UART 发送
+
+    U-->>-TxIt: TXE interrupt
+    deactivate Main
+    activate TxIt
+    TxIt->>+U: write 1 byte from RAM to DR
+    deactivate TxIt
+    activate Main
+
+    U-->>-TxIt: TXE interrupt
+    deactivate Main
+    activate TxIt
+    TxIt->>+U: write 1 byte from RAM to DR
+    deactivate TxIt
+    activate Main
+
+    U-->>-TxIt: TXE interrupt
+    deactivate Main
+    activate TxIt
+    TxIt->>+U: write 1 byte from RAM to DR
+    deactivate TxIt
+    activate Main
+
+    U-->>-TxIt: TXE interrupt
+    deactivate Main
+    activate TxIt
+    TxIt->>+U: write 1 byte from RAM to DR
+    deactivate TxIt
+    activate Main
+
+  U-->>-Cb: TC interrupt
+  deactivate Main
+  activate Cb
+  Note left of Cb: 执行 TxCplt 回调
+  deactivate Cb
+  activate Main
+  Note right of Main: 继续主循环
+  deactivate Main
 ```
 
-主循环只启动传输，完成时通过注册 callback 通知。
+::right::
+
+## DMA 发送路径
+
+逐字节搬运由 DMA controller 完成，CPU 主要负责启动和收尾。
+
+```mermaid
+sequenceDiagram
+  box CPU
+    participant Main as Main loop
+    participant Cb as HAL_UART_TxCpltCallback()
+  end
+  participant U@{ "type": "boundary" } as UART
+  box DMA Controller
+    participant Dma as DMA stream
+  end
+
+  activate Main
+  Main->>Dma: HAL_UART_Transmit_DMA: 启动 DMA Controller
+  Main->>+U: 启动 UART 发送
+
+    U-->>-Dma: DMA request
+    activate Dma
+    Dma->>+U: write 1 byte from RAM to DR
+    deactivate Dma
+
+    U-->>-Dma: DMA request
+    activate Dma
+    Dma->>+U: write 1 byte from RAM to DR
+    deactivate Dma
+
+    U-->>-Dma: DMA request
+    activate Dma
+    Dma->>+U: write 1 byte from RAM to DR
+    deactivate Dma
+
+    U-->>-Dma: DMA request
+    activate Dma
+    Dma->>+U: write 1 byte from RAM to DR
+    deactivate Dma
+
+  U-->>-Cb: TC interrupt
+  deactivate Main
+  activate Cb
+  Note left of Cb: 执行 TxCplt 回调
+  deactivate Cb
+  activate Main
+  Note right of Main: 继续主循环
+  deactivate Main
+```
 
 ---
 
 # 改成 DMA
 
 ```c
-static uint8_t tx_buf[256];
-static volatile bool tx_busy = false;
-static volatile bool tx_done = false;
-static volatile bool tx_error = false;
-
 bool debug_send_dma(void) {
     if (tx_busy) {
         return false;
