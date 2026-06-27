@@ -22,6 +22,9 @@ importers:
       skills:
         specifier: 1.5.11
         version: 1.5.11
+      slidev-addon-counter:
+        specifier: ^0.2.0
+        version: 0.2.0(vue@3.5.38(typescript@5.9.3))
       slidev-theme-dracula:
         specifier: ^0.2.0
         version: 0.2.0
@@ -4199,6 +4202,15 @@ packages:
     engines: { node: ">=18" }
     hasBin: true
 
+  slidev-addon-counter@0.2.0:
+    resolution:
+      {
+        integrity: sha512-+//h5wmz7oKdTO0n+zKszK3GR5wcIqjG/LfBQRnRMhcvt8n1YAzqykedjekr0/R+qyYj8F7NnZEmQXJ55aw7zA==,
+      }
+    engines: { node: ">=22.18.0", slidev: ">=52.0.0" }
+    peerDependencies:
+      vue: ^3.5.0
+
   slidev-theme-dracula@0.2.0:
     resolution:
       {
@@ -7671,6 +7683,13 @@ snapshots:
   skills@1.5.11:
     dependencies:
       yaml: 2.9.0
+
+  slidev-addon-counter@0.2.0(vue@3.5.38(typescript@5.9.3)):
+    dependencies:
+      htmlparser2: 12.0.0
+      jiti: 2.7.0
+      markdown-it: 14.2.0
+      vue: 3.5.38(typescript@5.9.3)
 
   slidev-theme-dracula@0.2.0:
     dependencies:

@@ -1,5 +1,7 @@
 ---
 theme: dracula
+addons:
+  - slidev-addon-counter
 title: "UART IT/DMA with CMSIS-RTOS2"
 info: |
   RoboMaster Summer Camp 2026 - UART IT/DMA with CMSIS-RTOS2:
@@ -38,13 +40,13 @@ RM Summer Camp 2026
 layout: section
 ---
 
-# 1 - Blocking TX
+# <Counter :level="1" /> - Blocking TX
 
 主循环里的周期阻塞发送
 
 ---
 
-# 阻塞发送
+# <Counter :level="2" /> 阻塞发送
 
 ```c
 static uint8_t tx_buf[64];
@@ -104,13 +106,13 @@ $$
 layout: section
 ---
 
-# 2 - 中断发送
+# <Counter :level="1" /> - 中断发送
 
 使用中断异步发送，避免阻塞
 
 ---
 
-# 主循环开始变忙
+# <Counter :level="2" /> 主循环加入更多任务
 
 ```c
 while (1) {
@@ -214,7 +216,7 @@ while (1) {
 
 ---
 
-# 弱函数
+# <Counter :level="2" /> 弱函数
 
 HAL 中（`stm32f4xx_hal_uart.c`），这些中断回调函数被定义为弱函数：
 
@@ -319,13 +321,13 @@ callback 名字变成模块自己的名字，不再占用 HAL 全局弱函数。
 layout: section
 ---
 
-# 3 - DMA
+# <Counter :level="1" /> - DMA
 
 大数据量发送时让 DMA 搬数据
 
 ---
 
-# 普通 IT 发送路径：CPU 仍逐字节参与
+# <Counter :level="2" /> 普通 IT 发送路径：CPU 仍逐字节参与
 
 当发送内容变大时：
 
@@ -477,7 +479,7 @@ sequenceDiagram
 
 ---
 
-# 改成 DMA
+# <Counter :level="2" /> 改成 DMA
 
 ```c
 bool debug_send_dma(void) {
@@ -551,13 +553,13 @@ UART + DMA 一次只能发送一段正在进行的传输。
 layout: section
 ---
 
-# 4 - Bare-Metal TX Queue
+# <Counter :level="1" /> - Bare-Metal TX Queue
 
 裸机队列缓冲待发送消息
 
 ---
 
-# 目标结构
+# <Counter :level="2" /> 目标结构
 
 ```mermaid
 flowchart LR
@@ -600,7 +602,7 @@ typedef struct {
 
 ---
 
-# 入队
+# <Counter :level="2" /> 入队
 
 ```c
 bool uart_send_async(const uint8_t *data, uint16_t size) {
@@ -708,13 +710,13 @@ while (1) {
 layout: section
 ---
 
-# 5 - RTOS Version
+# <Counter :level="1" /> - RTOS Version
 
 把裸机队列改成 CMSIS-RTOS2
 
 ---
 
-# 从裸机结构映射到 RTOS
+# <Counter :level="2" /> 从裸机结构映射到 RTOS
 
 | 裸机写法              | RTOS 写法                         |
 | --------------------- | --------------------------------- |
@@ -751,7 +753,7 @@ typedef struct {
 
 ---
 
-# 初始化 RTOS 对象和 callback
+# <Counter :level="2" /> 初始化 RTOS 对象和 callback
 
 ```c
 bool rtos_uart_init(RtosUart *uart) {
@@ -814,7 +816,7 @@ bool rtos_uart_send_async(
 
 ---
 
-# TX Thread
+# <Counter :level="2" /> TX Thread
 
 ```c
 void uart_tx_thread(void *argument) {
@@ -913,13 +915,13 @@ void debug_task(void *argument) {
 layout: section
 ---
 
-# 6 - RX Path
+# <Counter :level="1" /> - RX Path
 
 对应地看一下接收数据
 
 ---
 
-# 接收也有三种路径
+# <Counter :level="2" /> 接收也有三种路径
 
 | 模式      | 典型 API               | 特点                        |
 | --------- | ---------------------- | --------------------------- |
@@ -934,7 +936,7 @@ layout: section
 
 ---
 
-# 固定长度接收
+# <Counter :level="2" /> 固定长度接收
 
 适合每帧长度固定的协议：
 
@@ -1033,13 +1035,13 @@ void remote_rx_thread(void *argument) {
 layout: section
 ---
 
-# 7 - UART IDLE Event
+# <Counter :level="1" /> - UART IDLE Event
 
 变长接收时怎么判断“一段数据结束了”
 
 ---
 
-# 普通 RX Complete 的限制
+# <Counter :level="2" /> 普通 RX Complete 的限制
 
 普通 `HAL_UART_Receive_IT/DMA` 需要提前指定长度：
 
@@ -1082,7 +1084,7 @@ IDLE 不是协议解析，它只是一个“可能分段”的硬件事件。
 
 ---
 
-# Receive To Idle DMA
+# <Counter :level="2" /> Receive To Idle DMA
 
 ```c
 #define RX_DMA_SIZE 256
@@ -1129,7 +1131,7 @@ static void uart_rx_event_callback(
 
 ---
 
-# 和普通 RX Complete 对比
+# <Counter :level="2" /> 和普通 RX Complete 对比
 
 | 机制        | 触发条件                   | 适合场景                   |
 | ----------- | -------------------------- | -------------------------- |
