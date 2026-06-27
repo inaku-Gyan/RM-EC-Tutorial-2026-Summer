@@ -406,7 +406,7 @@ flowchart LR
 layout: section
 ---
 
-# <Counter :level="1" /> - PID Basics
+# <Counter :level="1" /> - PID Control
 
 从单个电机速度环开始
 
@@ -424,39 +424,169 @@ flowchart LR
   Motor --> Feedback
 ```
 
-先让一个电机速度稳定，再扩展到四个轮子。
-
-整车控制的问题，经常可以拆回“某个电机有没有跟上目标”。
-
 ---
 
-# PID 的三个部分
+# 误差：控制器真正看到的量
 
-| 项  | 公式直觉     | 主要作用               | 常见风险     |
-| --- | ------------ | ---------------------- | ------------ |
-| P   | 当前误差     | 误差越大，输出越大     | 太大容易震荡 |
-| I   | 误差累积     | 消除长期稳态误差       | 容易积分饱和 |
-| D   | 误差变化速度 | 抑制快速变化，提高阻尼 | 对噪声敏感   |
+```mermaid
+flowchart LR
+  R[目标速度 r] --> E[误差 e = r - y]
+  Y[反馈速度 y] --> E
+  E --> U[控制输出 u]
+```
 
-大多数速度环可以先从 PI 开始，D 项要谨慎加入。
+PID 不直接关心“电机为什么慢了”。
 
----
-
-# 连续形式到离散形式
+它先只看一件事：目标值和反馈值差了多少。
 
 $$
-u(t) = K_p e(t) + K_i \int_0^t e(\tau)d\tau + K_d \frac{de(t)}{dt}
+e(t) = r(t) - y(t)
+$$
+
+- $r(t)$：reference，目标值
+- $y(t)$：measurement，反馈值
+- $e(t)$：error，误差
+
+---
+layout: two-cols-header
+---
+
+# <Counter :level="2" /> Proportional：看到误差就推一把
+
+::left::
+
+P 项像一个“弹簧”：
+
+- 离目标越远，推得越用力
+- 离目标越近，推力自然变小
+- $K_{\mathrm{p}}$ 越大，反应越快，但也越容易震荡
+
+::right::
+
+```mermaid
+xychart-beta
+  title "P: larger error -> larger output"
+  x-axis "error" [-3, -2, -1, 0, 1, 2, 3]
+  y-axis "output" -6 --> 6
+  line "P output" [-6, -4, -2, 0, 2, 4, 6]
+```
+
+---
+
+# P 项公式
+
+$$
+u_{\mathrm{P}}(t) = K_{\mathrm{p}} e(t)
 $$
 
 其中：
 
-- `u(t)`：控制输出，比如电流命令
-- `e(t)`：误差，`target - feedback`
-- `Kp`：比例系数
-- `Ki`：积分系数
-- `Kd`：微分系数
+- $u_{\mathrm{P}}(t)$：P 项输出
+- $K_{\mathrm{p}}$：比例系数
+- $e(t)$：当前误差
 
-实际 MCU 里不会直接计算连续积分和连续微分。
+只用 P 控制时，很多系统会留下稳态误差：明明已经接近目标，但负载和摩擦让它差一点到不了。
+
+---
+
+# <Counter :level="2" /> Integral：把过去没补上的误差记下来
+
+```mermaid
+flowchart LR
+  E[每一时刻的误差] --> B[积分累积<br/>error area]
+  B --> U[逐渐增加的补偿输出]
+```
+
+I 项像一个“账本”：
+
+- 误差长期存在，就持续累加
+- 累加越多，补偿越强
+- 它适合消除稳态误差
+- 但如果不限制，容易累过头，造成明显超调
+
+---
+
+# I 项公式
+
+$$
+u_{\mathrm{I}}(t) =
+K_{\mathrm{i}}
+\int_{0}^{t} e(\tau)\,\mathrm{d}\tau
+$$
+
+其中：
+
+- $u_{\mathrm{I}}(t)$：I 项输出
+- $K_{\mathrm{i}}$：积分系数
+- $\int_{0}^{t} e(\tau)\,\mathrm{d}\tau$：从过去到现在的误差面积
+
+---
+layout: two-cols-header
+---
+
+# <Counter :level="2" /> Derivative：看到变化趋势就提前刹车
+
+::left::
+
+D 项像“阻尼”：
+
+- 误差变化越快，D 项反应越强
+- 它可以抑制超调，让系统不那么冲
+- 它对噪声很敏感，速度环里经常先不加或只加很小
+
+::right::
+
+```mermaid
+xychart-beta
+  title "D: reacts to slope"
+  x-axis "time" [0, 1, 2, 3, 4, 5, 6]
+  y-axis "error" -2 --> 6
+  line "fast change" [0, 4, 5, 4, 2, 1, 0]
+  line "slow change" [0, 1, 2, 3, 3, 2, 1]
+```
+
+---
+
+# D 项公式
+
+$$
+u_{\mathrm{D}}(t) =
+K_{\mathrm{d}}
+\frac{\mathrm{d}e(t)}{\mathrm{d}t}
+$$
+
+其中：
+
+- $u_{\mathrm{D}}(t)$：D 项输出
+- $K_{\mathrm{d}}$：微分系数
+- $\frac{\mathrm{d}e(t)}{\mathrm{d}t}$：误差随时间变化的速度
+
+两个 $\mathrm{d}$ 都是微分算子，使用直体；$e$ 和 $t$ 是变量，使用斜体。
+
+---
+
+# <Counter :level="2" /> 连续 PID
+
+$$
+u(t) =
+K_{\mathrm{p}} e(t)
++
+K_{\mathrm{i}} \int_{0}^{t} e(\tau)\,\mathrm{d}\tau
++
+K_{\mathrm{d}} \frac{\mathrm{d}e(t)}{\mathrm{d}t}
+$$
+
+| 项  | 看什么       | 直觉               | 主要风险     |
+| --- | ------------ | ------------------ | ------------ |
+| P   | 当前误差     | 现在差多少就推多少 | 太大容易震荡 |
+| I   | 历史误差面积 | 长期不到目标就补偿 | 容易积分饱和 |
+| D   | 误差变化趋势 | 变化太快就阻尼     | 对噪声敏感   |
+
+---
+
+# <Counter :level="2" /> 从连续到离散
+
+MCU 里没有真正连续运行的 PID。
 
 控制任务通常每隔固定周期运行一次：
 
@@ -464,182 +594,240 @@ $$
 1 ms / 2 ms / 5 ms / 10 ms
 ```
 
-离散实现中：
+设采样周期为 $T_{\mathrm{s}}$，第 $k$ 次计算时：
 
 $$
-e[k] = target[k] - feedback[k]
-$$
-
-$$
-integral[k] = integral[k-1] + e[k] \cdot dt
-$$
-
-$$
-derivative[k] = \frac{e[k] - e[k-1]}{dt}
-$$
-
-$$
-u[k] = K_p e[k] + K_i integral[k] + K_d derivative[k]
+e[k] = r[k] - y[k]
 $$
 
 ---
 
-# 位置式 PID 与增量式 PID
+# 离散 P / I / D
 
-位置式 PID 每次直接计算完整输出：
+$$
+u_{\mathrm{P}}[k] =
+K_{\mathrm{p}} e[k]
+$$
 
-```c
-output = kp * error + ki * integral + kd * derivative;
-```
+$$
+u_{\mathrm{I}}[k] =
+u_{\mathrm{I}}[k-1] +
+K_{\mathrm{i}} e[k] T_{\mathrm{s}}
+$$
 
-特点：
+$$
+u_{\mathrm{D}}[k] =
+K_{\mathrm{d}}
+\frac{e[k] - e[k-1]}{T_{\mathrm{s}}}
+$$
 
-- 概念直观
-- 便于加输出限幅和积分限幅
-- 适合先实现速度环
+积分从“面积”变成每次累加一小块。
 
-增量式 PID 计算的是输出变化量：
+微分从“瞬时斜率”变成相邻两次误差的差分。
 
-```c
-output += delta_output;
-```
+---
 
-特点：
+# 离散 PID 输出
 
-- 对某些执行器更方便
-- 输出天然保留上一次状态
-- 公式和状态变量更容易写错
+$$
+\begin{aligned}
+u[k] &=
+u_{\mathrm{P}}[k] +
+u_{\mathrm{I}}[k] +
+u_{\mathrm{D}}[k] \\
+&= K_{\mathrm{p}} e[k]
++ \left(u_{\mathrm{I}}[k-1] + K_{\mathrm{i}} e[k] T_{\mathrm{s}}\right)
++ K_{\mathrm{d}} \frac{e[k] - e[k-1]}{T_{\mathrm{s}}} \\
+&= u[k-1] + K_{\mathrm{p}} (e[k] - e[k-1]) + K_{\mathrm{i}} e[k] T_{\mathrm{s}} + K_{\mathrm{d}} \frac{e[k] - e[k-1]}{T_{\mathrm{s}}}
+\end{aligned}
+$$
 
-本讲推荐先用位置式 PID 把电机速度环跑通。
+工程实现时还会额外处理：
+
+- 输出限幅：不能超过电调或协议允许范围
+- 积分限幅：避免积分一直累到不可恢复
+- 死区：目标附近的小误差可以不处理
+- 周期稳定：$T_{\mathrm{s}}$ 抖动会直接影响 I 和 D
 
 ---
 layout: section
 ---
 
-# <Counter :level="1" /> - PID Implementation
+# <Counter :level="1" /> - PID Usage
 
-离散 PID 与工程限制
-
----
-
-# <Counter :level="2" /> PID 结构体
-
-```c
-typedef struct {
-    float kp;
-    float ki;
-    float kd;
-
-    float integral;
-    float prev_error;
-
-    float out_limit;
-    float integral_limit;
-    float deadband;
-} PidController;
-```
-
-PID 不是只有三个参数。
-
-工程里更重要的是：状态、限幅、周期和异常处理。
+以 Arm CMSIS-DSP `arm_pid_f32` 为例
 
 ---
 
-# `pid_calc`
+# <Counter :level="2" /> CMSIS-DSP 提供了什么
+
+Arm CMSIS-DSP 的 floating-point PID 主要用这几个对象和函数：
+
+| 名称                   | 作用                          |
+| ---------------------- | ----------------------------- |
+| `arm_pid_instance_f32` | 保存 PID 参数、派生系数和状态 |
+| `Kp`, `Ki`, `Kd`       | 用户设置的 PID 参数           |
+| `arm_pid_init_f32()`   | 根据参数初始化实例            |
+| `arm_pid_f32()`        | 每次处理一个输入样本          |
+| `arm_pid_reset_f32()`  | 清空历史状态                  |
+
+---
+layout: two-cols-header
+---
+
+# 初始化 PID 实例
+
+::left::
+
+使用顺序：
+
+- 先确定速度环周期 `SPEED_LOOP_TS_SEC`
+- 连续参数先换算成 CMSIS-DSP 使用的离散参数
+- 再调用 `arm_pid_init_f32`
+
+`resetStateFlag = 1` 表示初始化时清空历史状态
+
+`arm_pid_f32` 不接收 `dt`，所以周期影响必须在初始化参数里体现。
+
+$$
+\begin{aligned}
+u[k] = u[k-1] 
+&+ K_{\mathrm{p}} (e[k] - e[k-1]) \\
+&+ K_{\mathrm{i}} e[k] T_{\mathrm{s}} \\
+&+ K_{\mathrm{d}} \frac{e[k] - e[k-1]}{T_{\mathrm{s}}}
+\end{aligned}
+$$
+
+::right::
 
 ```c
-float pid_calc(PidController *pid,
-               float target,
-               float feedback,
-               float dt) {
-    float error = target - feedback;
+#include "arm_math.h"
 
-    if (fabsf(error) < pid->deadband) {
-        error = 0.0f;
-    }
+#define SPEED_LOOP_TS_SEC 0.001f  // 1 ms
 
-    pid->integral += error * dt;
-    pid->integral = clamp(pid->integral,
-                          -pid->integral_limit,
-                          pid->integral_limit);
+static arm_pid_instance_f32 speed_pid;
 
-    float derivative = (error - pid->prev_error) / dt;
-    pid->prev_error = error;
+void speed_pid_init(void) {
+    const float32_t kp_cont = 8.0f;
+    const float32_t ki_cont = 200.0f;
+    const float32_t kd_cont = 0.0f;
 
-    float output = pid->kp * error +
-                   pid->ki * pid->integral +
-                   pid->kd * derivative;
+    speed_pid.Kp = kp_cont;
+    speed_pid.Ki = ki_cont * SPEED_LOOP_TS_SEC;
+    speed_pid.Kd = kd_cont / SPEED_LOOP_TS_SEC;
 
-    return clamp(output, -pid->out_limit, pid->out_limit);
+    arm_pid_init_f32(&speed_pid, 1);  // 1: reset state
 }
 ```
 
 ---
 
-# 控制周期 `dt`
+# 周期调用
+
+CMSIS-DSP 的 `arm_pid_f32` 每次处理一个输入样本。
+
+在速度环里，这个输入通常就是误差：
+
+```c
+void speed_loop_update(float32_t target_rpm, float32_t feedback_rpm) {
+    float32_t error = target_rpm - feedback_rpm;
+    float32_t current = arm_pid_f32(&speed_pid, error);
+
+    current = clamp_current(current);
+    motor_set_current(current);
+}
+```
+
+调用方仍然只需要关心：目标值、反馈值、输出限幅和执行器。
+
+---
+
+# CMSIS-DSP 的离散形式
+
+`arm_pid_f32` 内部使用的形式可以写成：
+
+$$
+y[n] =
+y[n-1] +
+A_0 x[n] +
+A_1 x[n-1] +
+A_2 x[n-2]
+$$
+
+其中：
+
+$$
+A_0 = K_{\mathrm{p}} + K_{\mathrm{i}} + K_{\mathrm{d}}
+$$
+
+$$
+A_1 = -K_{\mathrm{p}} - 2K_{\mathrm{d}},
+\qquad
+A_2 = K_{\mathrm{d}}
+$$
+
+---
+
+# 一个电机一个实例
+
+四个底盘电机通常各自有一个 `arm_pid_instance_f32`。
+
+```mermaid
+flowchart LR
+  W[四个轮速目标] --> P1[FL speed PID]
+  W --> P2[FR speed PID]
+  W --> P3[BL speed PID]
+  W --> P4[BR speed PID]
+  P1 --> C[CAN current command]
+  P2 --> C
+  P3 --> C
+  P4 --> C
+```
+
+---
+
+# 使用时关注的状态
+
+| 时机     | 应该做什么                               |
+| -------- | ---------------------------------------- |
+| 初始化   | 设置 `Kp/Ki/Kd`，调用 `arm_pid_init_f32` |
+| 周期任务 | 固定周期调用一次 `arm_pid_f32`           |
+| 模式切换 | 必要时调用 `arm_pid_reset_f32`           |
+| 电机离线 | 停止输出，清空或冻结 PID 状态            |
+| 参数调整 | 改参数后重新初始化派生系数               |
+
+PID 的“状态”比函数名更重要。CMSIS-DSP 把历史状态放在实例结构体里。
+
+---
+
+# 控制周期 $T_{\mathrm{s}}$
 
 PID 参数和控制周期绑定。
 
 同一组参数在不同周期下，表现可能完全不同：
 
-| 周期变化     | 影响                         |
-| ------------ | ---------------------------- |
-| `dt` 变大    | 积分每次增加更多，微分更粗糙 |
-| `dt` 抖动    | 输出不稳定，难以调参         |
-| 忘记乘 `dt`  | 换周期后参数意义改变         |
-| 任务偶发卡顿 | 电机输出可能出现尖峰         |
+| 周期变化                  | 影响                         |
+| ------------------------- | ---------------------------- |
+| $T_{\mathrm{s}}$ 变大     | 积分每次增加更多，微分更粗糙 |
+| $T_{\mathrm{s}}$ 抖动     | 输出不稳定，难以调参         |
+| 忘记使用 $T_{\mathrm{s}}$ | 换周期后参数意义改变         |
+| 任务偶发卡顿              | 电机输出可能出现尖峰         |
 
 速度环任务应该使用稳定周期。
 
----
+如果参数来自连续 PID 推导，常见处理是：
 
-# 四个电机的更新
+$$
+K_{\mathrm{p,cmsis}} = K_{\mathrm{p}}
+$$
 
-```c
-void motor_control_update(void) {
-    ChassisCmd cmd = remote_get_chassis_cmd();
-    WheelTarget target;
+$$
+K_{\mathrm{i,cmsis}} = K_{\mathrm{i}}T_{\mathrm{s}}
+$$
 
-    chassis_mecanum_solve(&cmd, &target);
-
-    for (int i = 0; i < 4; ++i) {
-        float feedback = motor[i].encoder_rpm;
-        float current = pid_calc(&motor[i].speed_pid,
-                                 target.rpm[i],
-                                 feedback,
-                                 CONTROL_DT);
-
-        motor[i].current_cmd = current;
-    }
-
-    motor_send_current_can(motor);
-}
-```
-
-真实工程里还要加离线保护、模式切换、斜坡限制等。
-
----
-
-# 反馈方向检查
-
-最危险的问题之一：反馈方向反了。
-
-```text
-target = +1000 rpm
-feedback = -800 rpm
-error = +1800 rpm
-PID output increases
-motor spins more negative
-error becomes larger
-```
-
-表现：
-
-- 一给目标就猛冲
-- 输出快速打满
-- PID 参数怎么调都不稳定
-
-先确认电机正方向、编码器正方向和运动学正方向一致。
+$$
+K_{\mathrm{d,cmsis}} = \frac{K_{\mathrm{d}}}{T_{\mathrm{s}}}
+$$
 
 ---
 layout: section
@@ -651,21 +839,31 @@ layout: section
 
 ---
 
-# 推荐调参顺序
+# 推荐调参顺序：P -> I -> D
 
-| 步骤 | 操作             | 观察重点                   |
-| ---- | ---------------- | -------------------------- |
-| 1    | `ki = 0, kd = 0` | 只调 P，观察响应和震荡边界 |
-| 2    | 增大 `kp`        | 直到响应够快但不过度震荡   |
-| 3    | 加小 `ki`        | 消除稳态误差               |
-| 4    | 必要时加 `kd`    | 抑制超调或快速变化         |
-| 5    | 做阶跃测试       | 观察目标切换时的响应       |
+| 步骤 | 操作                                            | 观察重点                |
+| ---- | ----------------------------------------------- | ----------------------- |
+| 1    | 先令 $K_{\mathrm{i}} = 0$，$K_{\mathrm{d}} = 0$ | 只看 P 的响应和震荡边界 |
+| 2    | 增大 $K_{\mathrm{p}}$                           | 响应够快但不过度震荡    |
+| 3    | 加小 $K_{\mathrm{i}}$                           | 消除稳态误差            |
+| 4    | 必要时加很小的 $K_{\mathrm{d}}$                 | 抑制超调或快速变化      |
+| 5    | 做阶跃测试                                      | 观察目标切换时的响应    |
 
 先让系统可控，再追求更快。
 
 ---
+layout: two-cols-header
+---
 
 # 典型响应
+
+::left::
+
+调参时不要只看“最后有没有到目标”。
+
+还要看上升速度、超调、震荡和恢复时间。
+
+::right::
 
 ```mermaid
 xychart-beta
@@ -677,40 +875,43 @@ xychart-beta
   line "overshoot" [0, 850, 1200, 930, 1040, 990, 1000]
 ```
 
-调参时不要只看“最后有没有到目标”。
-
-还要看上升速度、超调、震荡和恢复时间。
-
 ---
 
-# 常见现象表
+# 常见现象
 
-| 现象             | 可能原因                            | 优先检查              |
-| ---------------- | ----------------------------------- | --------------------- |
-| 电机无力         | `kp` 太小、输出限幅太低、反馈单位错 | 当前输出是否已经打满  |
-| 稳态误差明显     | 没有 I 项、摩擦或负载偏大           | 小幅增加 `ki`         |
-| 来回震荡         | `kp` 太大、周期抖动、反馈噪声大     | 降低 `kp`，确认 `dt`  |
-| 超调很大         | I 项过强、没有积分限幅              | 降低 `ki`，加积分限幅 |
-| 一启动就冲反方向 | 电机方向或反馈方向反了              | 单电机正方向测试      |
-| 目标变化时很猛   | 目标阶跃太大、没有斜坡限制          | 加 target ramp        |
+| 现象             | 可能原因                                        | 优先检查                          |
+| ---------------- | ----------------------------------------------- | --------------------------------- |
+| 电机无力         | $K_{\mathrm{p}}$ 太小、输出限幅太低、反馈单位错 | 当前输出是否已经打满              |
+| 稳态误差明显     | 没有 I 项、摩擦或负载偏大                       | 小幅增加 $K_{\mathrm{i}}$         |
+| 来回震荡         | $K_{\mathrm{p}}$ 太大、周期抖动、反馈噪声大     | 降低 $K_{\mathrm{p}}$，确认周期   |
+| 超调很大         | I 项过强、没有积分限幅                          | 降低 $K_{\mathrm{i}}$，加积分限幅 |
+| 一启动就冲反方向 | 电机方向或反馈方向反了                          | 单电机正方向测试                  |
+| 目标变化时很猛   | 目标阶跃太大、没有斜坡限制                      | 给目标值加变化率限制              |
 
+---
+layout: two-cols-header
 ---
 
 # 目标斜坡
+
+::left::
 
 遥控器目标可能瞬间从 0 跳到最大速度。
 
 对电机速度环来说，这就是一个很大的阶跃输入。
 
-```c
-float ramp_to(float current, float target, float max_delta) {
-    float delta = target - current;
-    delta = clamp(delta, -max_delta, max_delta);
-    return current + delta;
-}
-```
-
 斜坡限制能降低启动冲击，也能让调参更可控。
+
+::right::
+
+```mermaid
+xychart-beta
+  title "target ramp"
+  x-axis "time" [0, 1, 2, 3, 4, 5]
+  y-axis "target rpm" 0 --> 1000
+  line "step target" [0, 1000, 1000, 1000, 1000, 1000]
+  line "ramped target" [0, 250, 500, 750, 1000, 1000]
+```
 
 ---
 layout: section
