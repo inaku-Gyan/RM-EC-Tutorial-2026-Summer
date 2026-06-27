@@ -318,6 +318,31 @@ static void debug_uart_error_callback(UART_HandleTypeDef *huart) {
 callback 名字变成模块自己的名字，不再占用 HAL 全局弱函数。
 
 ---
+
+# <Counter :level="2" /> 异步发送 buffer 生命周期
+
+错误写法：
+
+```c
+bool debug_send_it(void) {
+    uint8_t local_buf[128];
+    uint16_t len = debug_build_packet(local_buf, sizeof(local_buf));
+
+    return HAL_UART_Transmit_IT(&huart2, local_buf, len) == HAL_OK;
+}
+```
+
+`Transmit_IT` 返回只代表启动成功。函数返回后，`local_buf` 已经无效，但 UART 发送还可能继续读取它。
+
+正确方向：
+
+```c
+static uint8_t tx_buf[256];
+```
+
+发送完成回调到来前，buffer 必须保持有效，且内容不能被修改。
+
+---
 layout: section
 ---
 
@@ -504,30 +529,7 @@ bool debug_send_dma(void) {
 
 callback 仍然使用刚才注册的 TX complete 和 error callback。
 
----
-
-# DMA buffer 生命周期
-
-错误写法：
-
-```c
-bool debug_send_dma(void) {
-    uint8_t local_buf[128];
-    uint16_t len = debug_build_packet(local_buf, sizeof(local_buf));
-
-    return HAL_UART_Transmit_DMA(&huart2, local_buf, len) == HAL_OK;
-}
-```
-
-函数返回后，`local_buf` 已经无效，但 DMA 还可能继续读取它。
-
-正确方向：
-
-```c
-static uint8_t tx_buf[256];
-```
-
-DMA 传输完成前，buffer 必须保持有效，且内容不能被修改。
+DMA 同样遵守前面讲过的异步 buffer 生命周期规则。
 
 ---
 
