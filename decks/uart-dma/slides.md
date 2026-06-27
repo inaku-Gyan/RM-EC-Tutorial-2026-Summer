@@ -555,9 +555,9 @@ UART + DMA 一次只能发送一段正在进行的传输。
 layout: section
 ---
 
-# <Counter :level="1" /> - Bare-Metal TX Queue
+# <Counter :level="1" /> - TX Buffer Queue
 
-裸机队列缓冲待发送消息
+使用队列缓冲待发送消息
 
 ---
 
@@ -565,12 +565,12 @@ layout: section
 
 ```mermaid
 flowchart LR
-  M1[debug module] --> Q[TX Queue]
+  M1[debug module] --> Q[TX Buffer Queue]
   M2[ui module] --> Q
   M3[control module] --> Q
   Q --> Poll[uart_tx_poll]
   Poll --> DMA[HAL_UART_Transmit_DMA]
-  DMA --> CB[registered tx callback]
+  DMA --> CB[registered tx callbacks]
   CB --> Poll
 ```
 
@@ -578,10 +578,9 @@ flowchart LR
 
 ---
 
-# 消息结构
+# 队列接口
 
 ```c
-#define UART_TX_QUEUE_LEN 8
 #define UART_TX_MSG_MAX_SIZE 128
 
 typedef struct {
@@ -589,46 +588,31 @@ typedef struct {
     uint16_t size;
 } UartTxMsg;
 
-typedef struct {
-    UartTxMsg items[UART_TX_QUEUE_LEN];
-    uint8_t head;
-    uint8_t tail;
-    uint8_t count;
+static volatile bool tx_busy = false;
 
-    bool tx_busy;
-    uint32_t drop_count;
-} UartTxQueue;
+bool uart_tx_queue_push(const uint8_t *data, uint16_t size);
+const UartTxMsg *uart_tx_queue_front(void);
+void uart_tx_queue_pop(void);
 ```
 
-为了教学简单，消息数据直接复制进队列。
+队列内部可以是环形缓冲；这里不展开实现，只关心 UART 模块如何使用它。
 
 ---
 
-# <Counter :level="2" /> 入队
+# <Counter :level="2" /> 业务只入队
 
 ```c
 bool uart_send_async(const uint8_t *data, uint16_t size) {
-    if (size > UART_TX_MSG_MAX_SIZE) {
-        return false;
-    }
-
-    if (tx_queue.count >= UART_TX_QUEUE_LEN) {
-        tx_queue.drop_count++;
+    if (!uart_tx_queue_push(data, size)) {
         led_red_blink();
         return false;
     }
 
-    UartTxMsg *msg = &tx_queue.items[tx_queue.tail];
-    memcpy(msg->data, data, size);
-    msg->size = size;
-
-    tx_queue.tail = (tx_queue.tail + 1) % UART_TX_QUEUE_LEN;
-    tx_queue.count++;
     return true;
 }
 ```
 
-这里的策略是：队列满就丢弃新消息。
+队列满、消息过长等策略封装在 queue API 内；业务模块只关心是否提交成功。
 
 ---
 
@@ -636,17 +620,19 @@ bool uart_send_async(const uint8_t *data, uint16_t size) {
 
 ```c
 void uart_tx_poll(void) {
-    if (tx_queue.tx_busy || tx_queue.count == 0) {
+    if (tx_busy) {
         return;
     }
 
-    UartTxMsg *msg = &tx_queue.items[tx_queue.head];
+    const UartTxMsg *msg = uart_tx_queue_front();
+    if (msg == NULL) {
+        return;
+    }
 
-    tx_queue.tx_busy = true;
+    tx_busy = true;
 
     if (HAL_UART_Transmit_DMA(&huart2, msg->data, msg->size) != HAL_OK) {
-        tx_queue.tx_busy = false;
-        tx_queue.drop_count++;
+        tx_busy = false;
         led_red_blink();
     }
 }
@@ -662,9 +648,8 @@ void uart_tx_poll(void) {
 static void uart_tx_done_callback(UART_HandleTypeDef *huart) {
     (void)huart;
 
-    tx_queue.head = (tx_queue.head + 1) % UART_TX_QUEUE_LEN;
-    tx_queue.count--;
-    tx_queue.tx_busy = false;
+    uart_tx_queue_pop();
+    tx_busy = false;
 
     led_green_blink();
 }
@@ -672,18 +657,16 @@ static void uart_tx_done_callback(UART_HandleTypeDef *huart) {
 static void uart_error_callback(UART_HandleTypeDef *huart) {
     (void)huart;
 
-    if (tx_queue.tx_busy && tx_queue.count > 0) {
-        tx_queue.head = (tx_queue.head + 1) % UART_TX_QUEUE_LEN;
-        tx_queue.count--;
+    if (tx_busy) {
+        uart_tx_queue_pop();
     }
 
-    tx_queue.tx_busy = false;
-    tx_queue.drop_count++;
+    tx_busy = false;
     led_red_blink();
 }
 ```
 
-发送完成后，下一次 `uart_tx_poll()` 会启动下一条消息。
+发送完成后弹出队首消息，下一次 `uart_tx_poll()` 会启动下一条消息。
 
 ---
 
@@ -722,10 +705,10 @@ layout: section
 
 | 裸机写法              | RTOS 写法                         |
 | --------------------- | --------------------------------- |
-| 环形队列              | `osMessageQueue`                  |
-| 主循环 `uart_tx_poll` | `UartTxThread`                    |
+| 环形队列              | 线程安全的 `osMessageQueue`       |
+| 主循环 `uart_tx_poll` | 单独的线程（任务）`UartTxThread`  |
 | `tx_busy` flag        | TX thread 串行处理                |
-| 完成 flag             | `osSemaphoreRelease`              |
+| 完成 flag             | 释放信号量 `osSemaphoreRelease`   |
 | 周期调用 poll         | thread 阻塞等待 queue / semaphore |
 
 RTOS 不改变“队列 + callback”的思路，只是把等待变成内核对象。
@@ -743,11 +726,10 @@ typedef struct {
 } UartTxMsg;
 
 typedef struct {
-    UART_HandleTypeDef *hal;
+    UART_HandleTypeDef *hal_huart;
     osMessageQueueId_t tx_queue;
     osSemaphoreId_t tx_done;
     volatile bool tx_ok;
-    uint32_t drop_count;
 } RtosUart;
 ```
 
@@ -762,18 +744,17 @@ bool rtos_uart_init(RtosUart *uart) {
     uart->tx_queue = osMessageQueueNew(8, sizeof(UartTxMsg), NULL);
     uart->tx_done = osSemaphoreNew(1, 0, NULL);
 
-    if (uart->tx_queue == NULL || uart->tx_done == NULL) {
+    if (uart->tx_queue == NULL || uart->tx_done == NULL)
         return false;
-    }
 
     HAL_UART_RegisterCallback(
-        uart->hal,
+        uart->hal_huart,
         HAL_UART_TX_COMPLETE_CB_ID,
         rtos_uart_tx_done_callback
     );
 
     HAL_UART_RegisterCallback(
-        uart->hal,
+        uart->hal_huart,
         HAL_UART_ERROR_CB_ID,
         rtos_uart_error_callback
     );
@@ -794,18 +775,14 @@ bool rtos_uart_send_async(
     const uint8_t *data,
     uint16_t size
 ) {
-    if (size > UART_TX_MSG_MAX_SIZE) {
+    if (size > UART_TX_MSG_MAX_SIZE)
         return false;
-    }
 
-    UartTxMsg msg = {
-        .size = size,
-    };
+    UartTxMsg msg = { .size = size };
     memcpy(msg.data, data, size);
 
-    osStatus_t status = osMessageQueuePut(uart->tx_queue, &msg, 0, 0);
+    osStatus_t status = osMessageQueuePut(uart->tx_queue, &msg, 0, 0);  // timeout = 0: 不阻塞，立即返回
     if (status != osOK) {
-        uart->drop_count++;
         led_red_blink();
         return false;
     }
@@ -822,33 +799,23 @@ bool rtos_uart_send_async(
 
 ```c
 void uart_tx_thread(void *argument) {
-    RtosUart *uart = argument;
+    RtosUart *uart = (RtosUart *)argument;
     UartTxMsg msg;
 
     for (;;) {
-        osMessageQueueGet(
-            uart->tx_queue,
-            &msg,
-            NULL,
-            osWaitForever
-        );
-
+        osMessageQueueGet(uart->tx_queue, &msg, NULL, osWaitForever); // 阻塞等待，直到有队列消息（新的待发送消息）
         uart->tx_ok = false;
 
-        if (HAL_UART_Transmit_DMA(uart->hal, msg.data, msg.size) != HAL_OK) {
-            uart->drop_count++;
+        if (HAL_UART_Transmit_DMA(uart->hal_huart, msg.data, msg.size) != HAL_OK) { // 启动 DMA 进行异步发送
             led_red_blink();
             continue;
         }
 
-        osSemaphoreAcquire(uart->tx_done, osWaitForever);
+        osSemaphoreAcquire(uart->tx_done, osWaitForever);   // 阻塞等待，直到发送完成
 
         if (uart->tx_ok) {
             led_green_blink();
-        } else {
-            uart->drop_count++;
-            led_red_blink();
-        }
+        } else led_red_blink();
     }
 }
 ```
@@ -860,24 +827,22 @@ void uart_tx_thread(void *argument) {
 # TX Complete / Error Callback
 
 ```c
-static void rtos_uart_tx_done_callback(UART_HandleTypeDef *hal) {
-    RtosUart *uart = rtos_uart_from_hal(hal);
-    if (uart == NULL) {
+static void rtos_uart_tx_done_callback(UART_HandleTypeDef *hal_huart) {
+    RtosUart *uart = rtos_uart_from_hal(hal_huart);
+    if (uart == NULL)
         return;
-    }
 
     uart->tx_ok = true;
-    osSemaphoreRelease(uart->tx_done);
+    osSemaphoreRelease(uart->tx_done);   // 释放信号量，表示发送结束
 }
 
-static void rtos_uart_error_callback(UART_HandleTypeDef *hal) {
-    RtosUart *uart = rtos_uart_from_hal(hal);
-    if (uart == NULL) {
+static void rtos_uart_error_callback(UART_HandleTypeDef *hal_huart) {
+    RtosUart *uart = rtos_uart_from_hal(hal_huart);
+    if (uart == NULL)
         return;
-    }
 
     uart->tx_ok = false;
-    osSemaphoreRelease(uart->tx_done);
+    osSemaphoreRelease(uart->tx_done);   // 释放信号量，表示发送结束
 }
 ```
 
@@ -889,7 +854,7 @@ callback 只更新结果并释放 semaphore，不做复杂逻辑。
 
 ```c
 static RtosUart debug_uart = {
-    .hal = &huart2,
+    .hal_huart = &huart2,        // 绑定：用 UART2 作为调试串口；模块化设计使得随时可以换成其他 UART
 };
 
 void app_start(void) {
@@ -974,8 +939,8 @@ HAL_UART_RegisterCallback(
 static void remote_rx_done_callback(UART_HandleTypeDef *huart) {
     (void)huart;
 
-    remote_on_frame(remote_rx_buf, REMOTE_FRAME_SIZE);
-    remote_start_rx();
+    remote_on_frame(remote_rx_buf, REMOTE_FRAME_SIZE);   // 收到数据后，进行相关处理
+    remote_start_rx();                                   // 重新启动下一次接收
 }
 ```
 
@@ -1001,8 +966,8 @@ static void remote_rx_done_callback(UART_HandleTypeDef *huart) {
     };
     memcpy(msg.data, remote_rx_buf, REMOTE_FRAME_SIZE);
 
-    osMessageQueuePut(remote_rx_queue, &msg, 0, 0);
-    remote_start_rx();
+    osMessageQueuePut(remote_rx_queue, &msg, 0, 0);   // 投递消息到 RX queue，交给其他线程进行解析和处理
+    remote_start_rx();                                // 马上开始下一次接收
 }
 ```
 
@@ -1023,10 +988,10 @@ void remote_rx_thread(void *argument) {
             remote_rx_queue,
             &msg,
             NULL,
-            osWaitForever
+            osWaitForever          // 阻塞等待，直到有队列消息（新接收到的数据）
         );
 
-        remote_parse_frame(msg.data, msg.size);
+        remote_parse_frame(msg.data, msg.size);  // 解析收到的数据帧
     }
 }
 ```
@@ -1124,8 +1089,8 @@ static void uart_rx_event_callback(
 ) {
     (void)huart;
 
-    uart_on_rx_segment(rx_dma_buf, size);
-    uart_start_rx_idle();
+    uart_on_rx_segment(rx_dma_buf, size);   // 收到一段数据，交给协议解析
+    uart_start_rx_idle();                   // 重新启动下一次接收
 }
 ```
 
@@ -1180,7 +1145,7 @@ IDLE 可以辅助分段，但不能替代协议校验。
 
 ---
 
-# 本节主线回顾
+# <Counter :level="1" /> 本节主线回顾
 
 ```mermaid
 flowchart LR
@@ -1199,23 +1164,22 @@ flowchart LR
 
 ---
 
-# 官方资料入口
+# <Counter :level="1" /> Appendix
 
-STM32 HAL UART driver source：
+### 如何学习 HAL API？
 
+-- _直接阅读库源代码中的文档注释_
+
+在你本地项目的库源码中查看，或线上官方资源：
+
+STM32F4 HAL driver source：
 https://github.com/STMicroelectronics/stm32f4xx-hal-driver
 
-重点看：
+### 如何学习 CMSIS-RTOS2 API？
 
-- `HAL_UART_Transmit`
-- `HAL_UART_Transmit_IT`
-- `HAL_UART_Transmit_DMA`
-- `HAL_UART_RegisterCallback`
-- `HAL_UART_RegisterRxEventCallback`
-- `HAL_UARTEx_ReceiveToIdle_DMA`
+-- _直接阅读 CMSIS-RTOS2 文档_
 
-CMSIS-RTOS2 文档：
-
+Arm CMSIS-RTOS2 官方文档：
 https://arm-software.github.io/CMSIS_6/latest/RTOS2/index.html
 
 ---
@@ -1223,5 +1187,3 @@ layout: end
 ---
 
 # Q&A
-
-下一步：把 UART 队列接到遥控器、裁判系统或上位机协议
