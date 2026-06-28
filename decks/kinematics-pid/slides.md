@@ -722,8 +722,6 @@ $$
 - $K_{\mathrm{d}}$：微分系数
 - $\frac{\mathrm{d}e(t)}{\mathrm{d}t}$：误差随时间变化的速度
 
-两个 $\mathrm{d}$ 都是微分算子，使用直体；$e$ 和 $t$ 是变量，使用斜体。
-
 ---
 layout: two-cols-header
 ---
