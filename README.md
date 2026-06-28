@@ -4,18 +4,18 @@ RoboMaster Summer Camp 2026 嵌入式 C 开发课件合集。
 
 本仓库使用 [Slidev](https://sli.dev/) 维护多个课程幻灯片。每个课件都是一个独立的 deck，放在 `decks/<slug>/` 下，并通过统一的首页构建和发布。
 
-## 当前课件
-
-- `foundation-of-embedded-c-development`：嵌入式 C 开发基础，覆盖 Git、C 工程构建、嵌入式工具链、EIDE、外设寄存器、CubeMX 生成项目和 C 语言 OOP 写法。
-
 ## 仓库结构
 
 ```text
 .
 ├── decks/
-│   └── foundation-of-embedded-c-development/
-│       ├── deck.json          # deck 排序、路由和可见性
-│       └── slides.md          # Slidev 课件入口
+│   ├── foundation/
+│   │   ├── deck.json          # deck 排序、路由和可见性
+│   │   └── slides.md          # Slidev 课件入口
+│   ├── rtos/
+│   │   ├── deck.json
+│   │   └── slides.md
+│   └── ...
 ├── schemas/
 │   └── deck.schema.json       # deck.json 校验说明
 ├── scripts/                   # 多 deck 开发、构建和导出脚本
@@ -29,7 +29,7 @@ RoboMaster Summer Camp 2026 嵌入式 C 开发课件合集。
 ## 环境要求
 
 - Node.js 22
-- pnpm 11.8.0
+- pnpm 11
 
 如果本机已启用 Corepack，可以直接使用仓库声明的 pnpm 版本：
 
@@ -55,7 +55,7 @@ http://localhost:3030
 只开发某一个 deck 时，可以传入 deck slug：
 
 ```bash
-pnpm run dev foundation-of-embedded-c-development
+pnpm run dev foundation
 ```
 
 ## 构建
@@ -79,7 +79,7 @@ pnpm run preview
 导出指定 deck：
 
 ```bash
-pnpm run export foundation-of-embedded-c-development
+pnpm run export foundation
 ```
 
 PDF 导出依赖 Playwright 的 Chromium。如果导出时报浏览器缺失，可以先安装浏览器：
